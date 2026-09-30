@@ -1,0 +1,10 @@
+# Бинарники
+bin/
+build/bin/
+/osmodel
+/os_model
+*.exe
+
+# Фронтенд (сборка не требуется, но на случай генерации)
+node_modules/
+frontend/wailsjs/

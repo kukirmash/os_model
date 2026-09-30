@@ -1,0 +1,532 @@
+/* ========================================================================
+   Модель ОС — оформление интерфейса (тёмная тема)
+   ======================================================================== */
+
+:root {
+  --bg: #0b0f17;
+  --panel: #121826;
+  --panel-2: #1a2233;
+  --border: #222d42;
+  --border-soft: #1b2436;
+  --text: #e8ecf4;
+  --muted: #8b95aa;
+  --accent: #5b8cff;
+  --green: #34d399;
+  --amber: #fbbf24;
+  --red: #f87171;
+  --violet: #a78bfa;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+  --radius: 14px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background:
+    radial-gradient(1100px 550px at 12% -8%, rgba(91, 140, 255, 0.16), transparent 62%),
+    radial-gradient(900px 480px at 100% 0%, rgba(167, 139, 250, 0.12), transparent 55%),
+    var(--bg);
+  min-height: 100vh;
+  overflow-y: scroll;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #24304a;
+  border-radius: 8px;
+  border: 2px solid var(--bg);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.app {
+  max-width: 1560px;
+  margin: 0 auto;
+  padding: 20px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ------------------------------ Шапка ---------------------------------- */
+
+.topbar {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) auto auto;
+  align-items: center;
+  gap: 20px;
+  background: linear-gradient(180deg, rgba(26, 34, 51, 0.92), rgba(18, 24, 38, 0.92));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 20px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.brand-logo {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 0.5px;
+  color: #0b0f17;
+  background: linear-gradient(135deg, var(--accent), var(--violet));
+  box-shadow: 0 6px 20px rgba(91, 140, 255, 0.35);
+}
+
+.brand-text h1 {
+  font-size: 17px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.brand-text p {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+.topbar-metrics {
+  display: flex;
+  gap: 10px;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(11, 15, 23, 0.55);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 7px 14px 8px;
+  min-width: 96px;
+}
+
+.metric-label {
+  color: var(--muted);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+}
+
+.metric-value {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.metric-unit {
+  position: absolute;
+  transform: translate(0, -16px);
+  color: var(--muted);
+  font-size: 11px;
+  align-self: flex-end;
+}
+
+.metric-status {
+  justify-content: center;
+}
+
+/* ------------------------------ Кнопки --------------------------------- */
+
+.controls {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, #1c2436, #161d2c);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.05s, opacity 0.15s;
+}
+
+.btn:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.15);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  box-shadow: none;
+  border-color: var(--border);
+}
+
+.btn-icon {
+  padding: 9px 13px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.btn-danger:hover {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.15);
+}
+
+/* --------------------------- Метки состояний ---------------------------- */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.st-ready {
+  color: #8fb4ff;
+  background: rgba(91, 140, 255, 0.13);
+  border-color: rgba(91, 140, 255, 0.35);
+}
+
+.st-active {
+  color: #5eead4;
+  background: rgba(52, 211, 153, 0.12);
+  border-color: rgba(52, 211, 153, 0.38);
+}
+
+.st-blocked {
+  color: #fcd34d;
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.38);
+}
+
+.st-none {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.28);
+}
+
+/* ------------------------------- Сетка --------------------------------- */
+
+.grid {
+  display: grid;
+  gap: 16px;
+}
+
+.grid-top {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.grid-queues {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* ------------------------------ Карточки ------------------------------- */
+
+.card {
+  background: linear-gradient(180deg, rgba(22, 29, 45, 0.88), rgba(17, 23, 36, 0.94));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-soft);
+  background: rgba(11, 15, 23, 0.35);
+}
+
+.card-head h2 {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+  color: #aab6cd;
+}
+
+.card-body {
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.badge {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  max-width: 65%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --------------------------- Строки «ключ-значение» --------------------- */
+
+.kv {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kv-label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.kv b {
+  font-size: 13.5px;
+  text-align: right;
+}
+
+.kv-col {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.kv-col b {
+  text-align: left;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+  margin-top: auto;
+  border-top: 1px dashed var(--border-soft);
+  padding-top: 9px;
+}
+
+.controls-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.controls-list .kv {
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.controls-list .kv span {
+  color: var(--muted);
+}
+
+kbd {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: #0d1320;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  padding: 2px 7px;
+  color: #c6d0e4;
+}
+
+/* ------------------------------- Полоса -------------------------------- */
+
+.bar {
+  height: 10px;
+  border-radius: 999px;
+  background: #0d1320;
+  border: 1px solid var(--border-soft);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--violet));
+  transition: width 0.25s ease;
+}
+
+/* -------------------------------- Таблицы ------------------------------ */
+
+.table-wrap {
+  overflow: auto;
+  max-height: 340px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 8px 10px;
+  background: #101624;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.table tbody tr {
+  transition: background 0.12s;
+}
+
+.table tbody tr:hover {
+  background: rgba(91, 140, 255, 0.06);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.row-active {
+  background: rgba(52, 211, 153, 0.07);
+}
+
+.prio {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.prio-bar {
+  display: inline-block;
+  width: 76px;
+  height: 6px;
+  border-radius: 999px;
+  background: #0d1320;
+  border: 1px solid var(--border-soft);
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.prio-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--violet));
+  transition: width 0.25s ease;
+}
+
+.empty {
+  display: none;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-style: italic;
+  padding: 16px 6px;
+  text-align: center;
+}
+
+/* -------------------------------- Подвал ------------------------------- */
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 2px 6px;
+  flex-wrap: wrap;
+}
+
+.footer code {
+  font-family: var(--mono);
+  color: #b9c4da;
+  background: rgba(91, 140, 255, 0.08);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+/* ----------------------------- Адаптивность ---------------------------- */
+
+@media (max-width: 1450px) {
+  .grid-top {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1050px) {
+  .topbar {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar-metrics {
+    justify-content: space-between;
+  }
+
+  .grid-queues,
+  .grid-top {
+    grid-template-columns: 1fr;
+  }
+}

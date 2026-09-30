@@ -1,0 +1,16 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "os_model",
+  "outputfilename": "os_model",
+  "frontend:install": "",
+  "frontend:build": "",
+  "author": {
+    "name": "kukirmash",
+    "email": ""
+  },
+  "info": {
+    "productName": "Модель ОС (вариант 11)",
+    "productVersion": "1.0.0",
+    "comments": "Модель операционной системы: распределение времени ЦПр"
+  }
+}
