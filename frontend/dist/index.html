@@ -79,7 +79,7 @@
           <div class="kv"><span class="kv-label">Загружено заданий</span><b class="mono" id="sys-generated">0</b></div>
           <div class="kv"><span class="kv-label">Выполнено заданий</span><b class="mono" id="sys-completed">0</b></div>
           <div class="kv"><span class="kv-label">В очереди готовности</span><b class="mono" id="sys-ready">0</b></div>
-          <div class="kv"><span class="kv-label">Блокировано (IO)</span><b class="mono" id="sys-blocked">0</b></div>
+          <div class="kv"><span class="kv-label">Операций ввода-вывода</span><b class="mono" id="sys-io">0</b></div>
           <div class="kv"><span class="kv-label">Таблица PSW</span><b class="mono" id="sys-table">0 / 16</b></div>
         </div>
       </article>
@@ -99,7 +99,7 @@
       </article>
     </section>
 
-    <!-- Очереди: готовности и ввода-вывода -->
+    <!-- ЦПр, процессоры ВВ и прерывания -->
     <section class="grid grid-queues">
       <article class="card">
         <header class="card-head">
@@ -121,19 +121,38 @@
 
       <article class="card">
         <header class="card-head">
-          <h2>Блокированные (ввод-вывод)</h2>
-          <span class="badge mono" id="blocked-count">0</span>
+          <h2>Процессоры ввода-вывода</h2>
+          <span class="badge mono" id="io-count">0</span>
         </header>
         <div class="card-body">
           <div class="table-wrap">
-            <table class="table" id="blocked-table">
+            <table class="table" id="io-table">
               <thead>
-                <tr><th>ID</th><th>PC</th><th>Осталось тактов</th><th>Прогресс IO</th></tr>
+                <tr><th>Процессор</th><th>Процесс</th><th>Состояние</th><th>Тактов</th><th>Прогресс IO</th></tr>
               </thead>
               <tbody></tbody>
             </table>
           </div>
-          <div class="empty" id="blocked-empty">Нет процессов на вводе-выводе</div>
+          <div class="empty" id="io-empty">Нет активных операций ввода-вывода</div>
+        </div>
+      </article>
+
+      <article class="card">
+        <header class="card-head">
+          <h2>Прерывания</h2>
+          <span class="badge mono" id="int-count">0</span>
+        </header>
+        <div class="card-body">
+          <div class="table-wrap">
+            <table class="table" id="int-table">
+              <thead>
+                <tr><th>Такт</th><th>Тип</th><th>Источник</th><th>Процесс</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="empty" id="int-empty">Прерываний ещё не было</div>
+          <p class="hint">Прерывание формируется процессором ВВ по окончании операции; супервизор прерываний через регулировщик переводит процесс в «Готов».</p>
         </div>
       </article>
     </section>
@@ -150,7 +169,7 @@
             <thead>
               <tr>
                 <th>ID</th><th>Состояние</th><th>PC</th><th>Команд</th><th>Размер</th>
-                <th>Приоритет (база → динамика)</th><th>IO %</th><th>IO-остаток</th>
+                <th>Приоритет (база → динамика)</th><th>IO %</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -161,8 +180,8 @@
     </section>
 
     <footer class="footer">
-      <span>Модули: <code>process</code> → <code>memory</code> → <code>scheduler</code> → <code>cpu</code> → <code>io</code> → <code>os</code></span>
-      <span>Выбор: <code>P = max DynamicPriority</code> · Пересчёт: <code>DynamicPriority += Size</code> за такт</span>
+      <span>Модули: <code>process</code> → <code>memory</code> → <code>regulator</code> → <code>cpu</code> / <code>io</code> → <code>interrupt</code> → <code>os</code></span>
+      <span>Выбор: <code>P = max DynamicPriority</code> · Состояния меняет только регулировщик: <code>Process(p, event)</code></span>
     </footer>
   </div>
 

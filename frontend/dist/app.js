@@ -8,10 +8,11 @@
 
 "use strict";
 
-const STATE_NAMES = ["Отсутствует", "Готов", "Активен", "Блокирован (IO)"];
-const STATE_CLASSES = ["st-none", "st-ready", "st-active", "st-blocked"];
+const STATE_NAMES = ["Отсутствует", "Готов", "Активен", "Инициализация IO", "Блокирован"];
+const STATE_CLASSES = ["st-none", "st-ready", "st-active", "st-io-init", "st-blocked"];
 const CPU_NAMES = ["Ожидание", "Работа"];
 const OP_NAMES = ["+", "−", "×", "÷"];
+const INTERRUPT_NAMES = ["окончание ВВ", "таймер"];
 
 const $ = (id) => document.getElementById(id);
 
@@ -101,7 +102,11 @@ function commandText(snapshot) {
 function renderRows(tableId, rows, emptyId, rowBuilder) {
   const tbody = $(tableId).querySelector("tbody");
   tbody.innerHTML = rows.map(rowBuilder).join("");
-  $(emptyId).style.display = rows.length ? "none" : "block";
+
+  // Фиксированная высота: показываем либо таблицу, либо заглушку,
+  // чтобы вёрстка не «дёргалась» при изменении числа строк.
+  $(tableId).parentElement.style.display = rows.length ? "" : "none";
+  $(emptyId).style.display = rows.length ? "none" : "flex";
 }
 
 // ----------------------------------------------------------------------------
@@ -156,10 +161,10 @@ function render(snapshot) {
   setText("sys-generated", snapshot.generated);
   setText("sys-completed", snapshot.completed);
   setText("sys-ready", snapshot.ready.length);
-  setText("sys-blocked", snapshot.blocked.length);
+  setText("sys-io", snapshot.operations.length);
   setText("sys-table", `${snapshot.processes.length} / ${snapshot.maxProcesses}`);
   setText("ready-count", snapshot.ready.length);
-  setText("blocked-count", snapshot.blocked.length);
+  setText("io-count", snapshot.operations.length);
 
   // Очередь готовности
   const maxPriority = Math.max(1, ...snapshot.ready.map((p) => p.dynamicPriority));
@@ -177,16 +182,31 @@ function render(snapshot) {
       </td>
     </tr>`);
 
-  // Блокированные на вводе-выводе
-  const maxTicks = Math.max(1, ...snapshot.blocked.map((p) => p.ioTicksLeft));
-  renderRows("blocked-table", snapshot.blocked, "blocked-empty", (p) => `
+  // Процессоры ввода-вывода (активные операции)
+  renderRows("io-table", snapshot.operations, "io-empty", (op) => {
+    const done = op.totalTicks > 0
+      ? Math.round(((op.totalTicks - op.ticksLeft) / op.totalTicks) * 100)
+      : 0;
+    return `
     <tr>
-      <td class="mono">#${p.id}</td>
-      <td class="mono">${p.pc}</td>
-      <td class="mono">${p.ioTicksLeft}</td>
+      <td class="mono">#${op.processorId}</td>
+      <td class="mono">#${op.processId}</td>
+      <td>${statePill(op.state)}</td>
+      <td class="mono">${op.ticksLeft} / ${op.totalTicks}</td>
       <td>
-        <span class="prio-bar"><i style="width:${Math.round((p.ioTicksLeft / maxTicks) * 100)}%"></i></span>
+        <span class="prio-bar"><i style="width:${done}%"></i></span>
       </td>
+    </tr>`;
+  });
+
+  // Прерывания: счётчик обработанных и журнал (последние — сверху)
+  setText("int-count", snapshot.interruptsHandled);
+  renderRows("int-table", [...(snapshot.interruptLog ?? [])].reverse(), "int-empty", (s) => `
+    <tr>
+      <td class="mono">${s.time}</td>
+      <td>${INTERRUPT_NAMES[s.type] ?? "?"}</td>
+      <td class="mono">ВВ #${s.sourceId}</td>
+      <td class="mono">#${s.processId}</td>
     </tr>`);
 
   // Таблица процессов
@@ -199,7 +219,6 @@ function render(snapshot) {
       <td class="mono">${p.size}</td>
       <td class="mono">${p.basePriority} → ${p.dynamicPriority}</td>
       <td class="mono">${p.ioPercent} %</td>
-      <td class="mono">${p.ioTicksLeft}</td>
     </tr>`);
 
   // Параметры генерации заданий

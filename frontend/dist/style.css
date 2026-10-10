@@ -17,6 +17,7 @@
   --violet: #a78bfa;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
   --radius: 14px;
+  --table-h: 300px;
 }
 
 * {
@@ -63,7 +64,7 @@ body {
 }
 
 .app {
-  max-width: 1560px;
+  max-width: none;
   margin: 0 auto;
   padding: 20px 24px 28px;
   display: flex;
@@ -244,6 +245,12 @@ body {
   border-color: rgba(52, 211, 153, 0.38);
 }
 
+.st-io-init {
+  color: #c4b5fd;
+  background: rgba(167, 139, 250, 0.12);
+  border-color: rgba(167, 139, 250, 0.38);
+}
+
 .st-blocked {
   color: #fcd34d;
   background: rgba(251, 191, 36, 0.12);
@@ -269,6 +276,11 @@ body {
 
 .grid-queues {
   grid-template-columns: 1fr 1fr;
+}
+
+/* Очередь готовности — на всю ширину, ниже «Процессоры ВВ» и «Прерывания» */
+.grid-queues > .card:first-child {
+  grid-column: 1 / -1;
 }
 
 /* ------------------------------ Карточки ------------------------------- */
@@ -408,7 +420,7 @@ kbd {
 
 .table-wrap {
   overflow: auto;
-  max-height: 340px;
+  height: var(--table-h);
 }
 
 .table {
@@ -481,10 +493,13 @@ kbd {
 
 .empty {
   display: none;
+  height: var(--table-h);
+  align-items: center;
+  justify-content: center;
   color: var(--muted);
   font-size: 12.5px;
   font-style: italic;
-  padding: 16px 6px;
+  padding: 0 16px;
   text-align: center;
 }
 
@@ -528,5 +543,9 @@ kbd {
   .grid-queues,
   .grid-top {
     grid-template-columns: 1fr;
+  }
+
+  .grid-queues > .card:first-child {
+    grid-column: auto;
   }
 }

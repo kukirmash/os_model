@@ -1,4 +1,4 @@
-// Package memory — менеджер памяти модели.
+// Package memory — супервизор памяти модели.
 //
 // Отвечает исключительно за учёт свободной и занятой памяти. Внутреннее
 // расположение образов заданий в модели не детализируется.
@@ -11,36 +11,34 @@ import (
 )
 
 // ----------------------------------------------------------------------------------------
-// MemoryManager отслеживает суммарный и занятый объём памяти.
-type MemoryManager struct {
+// Allocator отслеживает суммарный и занятый объём памяти.
+type Allocator struct {
 	TotalSize int // общий объём моделируемой памяти
 	UsedSize  int // занятый объём памяти
 }
 
 // ----------------------------------------------------------------------------------------
 // CheckAvailable проверяет, достаточно ли свободной памяти для загрузки.
-func (m *MemoryManager) CheckAvailable(size int) bool {
-	freeSize := m.TotalSize - m.UsedSize
+func (a *Allocator) CheckAvailable(size int) bool {
+	freeSize := a.TotalSize - a.UsedSize
 	return freeSize >= size
 }
 
 // ----------------------------------------------------------------------------------------
 // Allocate выделяет память под новое задание и регистрирует его.
 // Возвращает ошибку, если свободной памяти недостаточно.
-func (m *MemoryManager) Allocate(task process.Task) error {
-	if !m.CheckAvailable(task.Size) {
+func (a *Allocator) Allocate(task process.Task) error {
+	if !a.CheckAvailable(task.Size) {
 		return fmt.Errorf("недостаточно памяти для задания %d: требуется %d, свободно %d",
-			task.ID, task.Size, m.TotalSize-m.UsedSize)
+			task.ID, task.Size, a.TotalSize-a.UsedSize)
 	}
 
-	m.UsedSize += task.Size
+	a.UsedSize += task.Size
 	return nil
 }
 
 // ----------------------------------------------------------------------------------------
 // Free освобождает память при завершении задания.
-func (m *MemoryManager) Free(task process.Task) {
-	m.UsedSize -= task.Size
+func (a *Allocator) Free(task process.Task) {
+	a.UsedSize -= task.Size
 }
-
-// ----------------------------------------------------------------------------------------
