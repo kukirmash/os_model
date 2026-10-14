@@ -1,9 +1,13 @@
 // ============================================================================
-// Модель ОС — интерфейс.
+// Модель ОС — интерфейс (вариант 11).
 //
 // Обмен с ядром идёт через события Wails:
 //   os:update    — снимок состояния из ядра (Go → JS);
 //   os:directive — управляющие директивы оператора (JS → Go).
+//
+// Разделы индикации соответствуют лабораторной работе 6: параметры системы,
+// параметры нового задания, параметры центрального процессора, параметры
+// процессов, последовательность выполнения процессов и средние значения.
 // ============================================================================
 
 "use strict";
@@ -69,17 +73,28 @@ window.addEventListener("keydown", (event) => {
 // ----------------------------------------------------------------------------
 
 function setText(id, value) {
-  $(id).textContent = value;
+  const el = $(id);
+  if (el) {
+    el.textContent = value;
+  }
 }
 
-function statePill(state) {
+// fmtInt — целое число в русской локали; fmt1 — число с одним знаком после запятой.
+function fmtInt(value) {
+  return Number(value ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 0 });
+}
+
+function fmt1(value) {
+  return Number(value ?? 0).toLocaleString("ru-RU", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+}
+
+function stateMark(state) {
   const name = STATE_NAMES[state] ?? "?";
   const cls = STATE_CLASSES[state] ?? "st-none";
-  return `<span class="pill ${cls}">${name}</span>`;
-}
-
-function formatSpeed(value) {
-  return Number(value).toLocaleString("ru-RU", { maximumFractionDigits: 1 });
+  return `<span class="state ${cls}">${name}</span>`;
 }
 
 function commandText(snapshot) {
@@ -99,38 +114,37 @@ function commandText(snapshot) {
   }
 }
 
+// renderRows отрисовывает таблицу или заглушку «нет данных», чтобы панель
+// не «дёргалась» при изменении числа строк.
 function renderRows(tableId, rows, emptyId, rowBuilder) {
   const tbody = $(tableId).querySelector("tbody");
   tbody.innerHTML = rows.map(rowBuilder).join("");
 
-  // Фиксированная высота: показываем либо таблицу, либо заглушку,
-  // чтобы вёрстка не «дёргалась» при изменении числа строк.
   $(tableId).parentElement.style.display = rows.length ? "" : "none";
   $(emptyId).style.display = rows.length ? "none" : "flex";
 }
 
 // ----------------------------------------------------------------------------
-// Отрисовка снимка состояния
+// Разделы индикации
 // ----------------------------------------------------------------------------
 
-function render(snapshot) {
+function renderHeader(snapshot) {
   paused = snapshot.paused;
   finished = snapshot.quit;
 
-  // Шапка
-  setText("m-time", snapshot.time);
-  setText("m-speed", formatSpeed(snapshot.speed));
+  setText("m-time", fmtInt(snapshot.time));
+  setText("m-speed", fmt1(snapshot.speed));
 
   const status = $("m-status");
   if (snapshot.quit) {
     status.textContent = "Завершено";
-    status.className = "pill st-none";
+    status.className = "state st-none";
   } else if (snapshot.paused) {
     status.textContent = "Пауза";
-    status.className = "pill st-blocked";
+    status.className = "state st-blocked";
   } else {
     status.textContent = "Работа";
-    status.className = "pill st-active";
+    status.className = "state st-active";
   }
 
   $("btn-pause").textContent = snapshot.paused ? "Продолжить" : "Пауза";
@@ -138,52 +152,149 @@ function render(snapshot) {
   $("btn-slower").disabled = snapshot.quit;
   $("btn-faster").disabled = snapshot.quit;
   $("btn-quit").disabled = snapshot.quit;
+}
 
-  // Центральный процессор
-  const cpuState = $("cpu-state");
-  cpuState.textContent = CPU_NAMES[snapshot.cpuState] ?? "—";
-  cpuState.className = "pill " + (snapshot.cpuState === 1 ? "st-active" : "st-none");
-  setText("cpu-active", snapshot.activeId ? `#${snapshot.activeId}` : "—");
-  setText("cpu-command", commandText(snapshot));
-
-  // Память
+function renderSystem(snapshot) {
+  const stats = snapshot.stats ?? {};
   const free = snapshot.memoryTotal - snapshot.memoryUsed;
   const percent = snapshot.memoryTotal
     ? Math.round((snapshot.memoryUsed / snapshot.memoryTotal) * 100)
     : 0;
+
+  setText("sys-generated", fmtInt(snapshot.generated));
+  setText("sys-completed", fmtInt(snapshot.completed));
+  setText("sys-table", `${snapshot.processes.length} / ${snapshot.maxProcesses}`);
+  setText("sys-int", fmtInt(snapshot.interruptsHandled));
+  setText(
+    "sys-ready",
+    `${fmtInt(stats.readyLen)} / ${fmt1(stats.readyAvg)} / ${fmtInt(stats.readyMax)}`
+  );
+  setText(
+    "sys-io",
+    `${fmtInt(stats.ioBusy)} / ${fmt1(stats.ioBusyAvg)} / ${fmtInt(stats.ioBusyMax)}`
+  );
+  setText("sys-throughput", fmt1(stats.throughput));
+
   $("mem-bar").style.width = percent + "%";
   setText("mem-percent", percent + " %");
-  setText("mem-used", snapshot.memoryUsed);
-  setText("mem-free", free);
-  setText("mem-total", snapshot.memoryTotal);
+  setText("mem-used", fmtInt(snapshot.memoryUsed));
+  setText("mem-free", fmtInt(free));
+  setText("mem-total", fmtInt(snapshot.memoryTotal));
+}
 
-  // Система
-  setText("sys-generated", snapshot.generated);
-  setText("sys-completed", snapshot.completed);
-  setText("sys-ready", snapshot.ready.length);
-  setText("sys-io", snapshot.operations.length);
-  setText("sys-table", `${snapshot.processes.length} / ${snapshot.maxProcesses}`);
-  setText("ready-count", snapshot.ready.length);
-  setText("io-count", snapshot.operations.length);
+function renderCPU(snapshot) {
+  const stats = snapshot.stats ?? {};
 
-  // Очередь готовности
-  const maxPriority = Math.max(1, ...snapshot.ready.map((p) => p.dynamicPriority));
-  renderRows("ready-table", snapshot.ready, "ready-empty", (p) => `
+  const cpuState = $("cpu-state");
+  cpuState.textContent = CPU_NAMES[snapshot.cpuState] ?? "—";
+  cpuState.className = "state " + (snapshot.cpuState === 1 ? "st-active" : "st-none");
+
+  setText("cpu-active", snapshot.activeId ? `#${snapshot.activeId}` : "—");
+  setText("cpu-command", commandText(snapshot));
+  setText("cpu-busy", `${fmtInt(stats.cpuBusy)} / ${fmtInt(stats.cpuIdle)}`);
+  setText("cpu-load", fmt1(stats.cpuUtilization) + " %");
+
+  const load = Math.max(0, Math.min(100, stats.cpuUtilization ?? 0));
+  $("cpu-load-bar").style.width = load + "%";
+}
+
+function renderTask(snapshot) {
+  const task = snapshot.lastTask ?? {};
+  // Задание может быть ещё не загружено (нет места в таблице PSW или
+  // памяти) — тогда выводится заявка без номера и со статусом ошибки.
+  const hasTask = task.size > 0 || task.totalCommands > 0;
+  const status = $("task-status");
+
+  if (!hasTask) {
+    status.textContent = "—";
+    status.className = "state st-none";
+    status.removeAttribute("title");
+  } else if (task.loaded) {
+    status.textContent = "Загружено";
+    status.className = "state st-active";
+    status.removeAttribute("title");
+  } else {
+    status.textContent = "Не загружено";
+    status.className = "state st-blocked";
+    status.title = task.reason ?? "";
+  }
+
+  const reason = $("task-reason");
+  if (hasTask && !task.loaded && task.reason) {
+    reason.textContent = "Причина: " + task.reason;
+    reason.hidden = false;
+  } else {
+    reason.textContent = "";
+    reason.hidden = true;
+  }
+
+  setText("task-id", task.id ? `#${task.id}` : "заявка");
+  setText("task-size", hasTask ? fmtInt(task.size) : "—");
+  setText("task-commands", hasTask ? fmtInt(task.totalCommands) : "—");
+  setText("task-io", hasTask ? task.ioPercent + " %" : "—");
+  setText("task-priority", hasTask ? fmtInt(task.basePriority) : "—");
+
+  const tp = snapshot.taskParams ?? {};
+  setText(
+    "task-ranges",
+    `Диапазоны генерации: размер ${tp.sizeMin}–${tp.sizeMax} ед. · команд ${tp.commandsMin}–${tp.commandsMax} · ВВ ${tp.ioPercentMin}–${tp.ioPercentMax} % · приоритет ${tp.priorityMin}–${tp.priorityMax}`
+  );
+}
+
+function renderAverages(snapshot) {
+  const stats = snapshot.stats ?? {};
+
+  setText("avg-loaded-count", fmtInt(stats.loadedCount) + " загружено");
+  setText("avg-size", fmt1(stats.avgSize));
+  setText("avg-commands", fmt1(stats.avgCommands));
+  setText("avg-io-percent", fmt1(stats.avgIoPercent) + " %");
+  setText("avg-priority", fmt1(stats.avgPriority));
+
+  setText("avg-completed-count", fmtInt(stats.completedCount) + " завершено");
+  setText("avg-wait", fmt1(stats.avgWait));
+  setText("avg-exec", fmt1(stats.avgExec));
+  setText("avg-io", fmt1(stats.avgIo));
+  setText("avg-turnaround", fmt1(stats.avgTurnaround));
+}
+
+function renderHistory(snapshot) {
+  const history = (snapshot.stats ?? {}).execHistory ?? [];
+  const box = $("exec-history");
+
+  if (!history.length) {
+    box.innerHTML = `<span class="empty-steps">процессы на ЦПр ещё не выбирались</span>`;
+  } else {
+    box.innerHTML = history
+      .map((id, index) =>
+        index === history.length - 1
+          ? `<span class="step current">${id}</span>`
+          : `<span class="step">${id}</span>`
+      )
+      .join("");
+  }
+
+  setText("history-count", `${history.length} / 16`);
+}
+
+function renderReady(snapshot) {
+  const rows = snapshot.ready ?? [];
+  setText("ready-count", fmtInt(rows.length));
+
+  renderRows("ready-table", rows, "ready-empty", (p) => `
     <tr>
       <td class="mono">#${p.id}</td>
-      <td>${statePill(p.state)}</td>
+      <td>${stateMark(p.state)}</td>
       <td class="mono">${p.pc}</td>
       <td class="mono">${p.size}</td>
-      <td>
-        <div class="prio">
-          <span class="mono">${p.dynamicPriority}</span>
-          <span class="prio-bar"><i style="width:${Math.round((p.dynamicPriority / maxPriority) * 100)}%"></i></span>
-        </div>
-      </td>
+      <td class="mono">${p.dynamicPriority}</td>
     </tr>`);
+}
 
-  // Процессоры ввода-вывода (активные операции)
-  renderRows("io-table", snapshot.operations, "io-empty", (op) => {
+function renderIO(snapshot) {
+  const rows = snapshot.operations ?? [];
+  setText("io-count", fmtInt(rows.length));
+
+  renderRows("io-table", rows, "io-empty", (op) => {
     const done = op.totalTicks > 0
       ? Math.round(((op.totalTicks - op.ticksLeft) / op.totalTicks) * 100)
       : 0;
@@ -191,42 +302,61 @@ function render(snapshot) {
     <tr>
       <td class="mono">#${op.processorId}</td>
       <td class="mono">#${op.processId}</td>
-      <td>${statePill(op.state)}</td>
+      <td>${stateMark(op.state)}</td>
       <td class="mono">${op.ticksLeft} / ${op.totalTicks}</td>
-      <td>
-        <span class="prio-bar"><i style="width:${done}%"></i></span>
-      </td>
+      <td class="mono">${done} %</td>
     </tr>`;
   });
+}
 
-  // Прерывания: счётчик обработанных и журнал (последние — сверху)
-  setText("int-count", snapshot.interruptsHandled);
-  renderRows("int-table", [...(snapshot.interruptLog ?? [])].reverse(), "int-empty", (s) => `
+function renderInterrupts(snapshot) {
+  const rows = [...(snapshot.interruptLog ?? [])].reverse();
+  setText("int-count", fmtInt(snapshot.interruptsHandled));
+
+  renderRows("int-table", rows, "int-empty", (s) => `
     <tr>
       <td class="mono">${s.time}</td>
       <td>${INTERRUPT_NAMES[s.type] ?? "?"}</td>
       <td class="mono">ВВ #${s.sourceId}</td>
       <td class="mono">#${s.processId}</td>
     </tr>`);
+}
 
-  // Таблица процессов
-  renderRows("proc-table", snapshot.processes, "proc-empty", (p) => `
+function renderProcesses(snapshot) {
+  const rows = snapshot.processes ?? [];
+  setText("proc-count", `${rows.length} / ${snapshot.maxProcesses}`);
+
+  renderRows("proc-table", rows, "proc-empty", (p) => `
     <tr class="${p.state === 2 ? "row-active" : ""}">
       <td class="mono">#${p.id}</td>
-      <td>${statePill(p.state)}</td>
+      <td>${stateMark(p.state)}</td>
       <td class="mono">${p.pc}</td>
       <td class="mono">${p.totalCommands}</td>
       <td class="mono">${p.size}</td>
-      <td class="mono">${p.basePriority} → ${p.dynamicPriority}</td>
       <td class="mono">${p.ioPercent} %</td>
+      <td class="mono">${p.basePriority} → ${p.dynamicPriority}</td>
+      <td class="mono">${p.waitTicks}</td>
+      <td class="mono">${p.execTicks}</td>
+      <td class="mono">${p.ioTicks}</td>
+      <td class="mono">${p.turnaround}</td>
     </tr>`);
+}
 
-  // Параметры генерации заданий
-  const tp = snapshot.taskParams;
-  setText(
-    "task-params",
-    `задание: размер ${tp.sizeMin}–${tp.sizeMax} · команд ${tp.commandsMin}–${tp.commandsMax} · IO ${tp.ioPercentMin}–${tp.ioPercentMax} % · приоритет ${tp.priorityMin}–${tp.priorityMax}`
-  );
+// ----------------------------------------------------------------------------
+// Отрисовка снимка состояния
+// ----------------------------------------------------------------------------
+
+function render(snapshot) {
+  renderHeader(snapshot);
+  renderSystem(snapshot);
+  renderCPU(snapshot);
+  renderTask(snapshot);
+  renderAverages(snapshot);
+  renderHistory(snapshot);
+  renderReady(snapshot);
+  renderIO(snapshot);
+  renderInterrupts(snapshot);
+  renderProcesses(snapshot);
 }
 
 // ----------------------------------------------------------------------------

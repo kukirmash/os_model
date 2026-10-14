@@ -18,13 +18,13 @@ func main() {
 	err := wails.Run(&options.App{
 		Title:     "Модель ОС — вариант 11",
 		Width:     1500,
-		Height:    950,
+		Height:    1000,
 		MinWidth:  1180,
-		MinHeight: 720,
+		MinHeight: 700,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 11, G: 15, B: 23, A: 1},
+		BackgroundColour: &options.RGBA{R: 243, G: 244, B: 246, A: 1},
 		OnStartup:        app.startup,
 		Bind:             []interface{}{app},
 	})

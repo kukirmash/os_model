@@ -17,6 +17,12 @@ type ProcessInfo struct {
 	State           int `json:"state"`
 	DynamicPriority int `json:"dynamicPriority"`
 	BasePriority    int `json:"basePriority"`
+
+	// Времена процесса, тактов (лабораторная работа 6).
+	WaitTicks  int `json:"waitTicks"`  // ожидание в очереди готовности
+	ExecTicks  int `json:"execTicks"`  // выполнение на ЦПр
+	IOTicks    int `json:"ioTicks"`    // «Инициализация IO» и «Блокирован»
+	Turnaround int `json:"turnaround"` // оборотное время от загрузки
 }
 
 // ----------------------------------------------------------------------------------------
@@ -52,6 +58,55 @@ type TaskParams struct {
 }
 
 // ----------------------------------------------------------------------------------------
+// TaskInfo — параметры нового (последнего сгенерированного) задания.
+type TaskInfo struct {
+	ID            int    `json:"id"`
+	Size          int    `json:"size"`
+	TotalCommands int    `json:"totalCommands"`
+	IOPercent     int    `json:"ioPercent"`
+	BasePriority  int    `json:"basePriority"`
+	Loaded        bool   `json:"loaded"` // задание загружено в память
+	Reason        string `json:"reason"` // причина, если загрузить не удалось
+}
+
+// ----------------------------------------------------------------------------------------
+// StatsInfo — статистика модели для индикации (лабораторная работа 6).
+type StatsInfo struct {
+	// Центральный процессор.
+	CPUBusy        int     `json:"cpuBusy"`        // тактов процессор выполнял команды
+	CPUIdle        int     `json:"cpuIdle"`        // тактов процессор простаивал
+	CPUUtilization float64 `json:"cpuUtilization"` // полезная загрузка ЦПр, %
+
+	// Длины очередей.
+	ReadyLen  int     `json:"readyLen"`  // текущая длина очереди готовности
+	ReadyAvg  float64 `json:"readyAvg"`  // средняя длина очереди готовности
+	ReadyMax  int     `json:"readyMax"`  // максимальная длина очереди
+	IOBusy    int     `json:"ioBusy"`    // занятых процессоров ВВ сейчас
+	IOBusyAvg float64 `json:"ioBusyAvg"` // среднее число занятых процессоров ВВ
+	IOBusyMax int     `json:"ioBusyMax"` // максимум занятых процессоров ВВ
+
+	// Производительность системы: выполненных заданий на 1000 тактов.
+	Throughput float64 `json:"throughput"`
+
+	// Последовательность выполнения процессов на ЦПр (до 16 номеров).
+	ExecHistory []int `json:"execHistory"`
+
+	// Средние входные параметры загруженных заданий.
+	LoadedCount  int     `json:"loadedCount"`
+	AvgSize      float64 `json:"avgSize"`
+	AvgCommands  float64 `json:"avgCommands"`
+	AvgIOPercent float64 `json:"avgIoPercent"`
+	AvgPriority  float64 `json:"avgPriority"`
+
+	// Средние выходные параметры завершённых процессов.
+	CompletedCount int     `json:"completedCount"`
+	AvgWait        float64 `json:"avgWait"`       // ожидание, тактов
+	AvgExec        float64 `json:"avgExec"`       // выполнение на ЦПр, тактов
+	AvgIO          float64 `json:"avgIo"`         // ввод-вывод, тактов
+	AvgTurnaround  float64 `json:"avgTurnaround"` // оборотное время, тактов
+}
+
+// ----------------------------------------------------------------------------------------
 // Snapshot — снимок состояния модели для индикации в интерфейсе.
 type Snapshot struct {
 	Time      int     `json:"time"`
@@ -83,6 +138,8 @@ type Snapshot struct {
 	Processes  []ProcessInfo   `json:"processes"`  // таблица PSW
 
 	TaskParams TaskParams `json:"taskParams"`
+	LastTask   TaskInfo   `json:"lastTask"` // параметры нового задания
+	Stats      StatsInfo  `json:"stats"`    // статистика модели (лаб. 6)
 }
 
 // ----------------------------------------------------------------------------------------
@@ -122,16 +179,56 @@ func (sys *System) Snapshot() Snapshot {
 		snap.CommandDuration = sys.CPU.CurrentCommand.Duration
 	}
 
-	snap.Ready = processInfos(sys.Regulator.Planner.ReadyQueue)
+	snap.LastTask = TaskInfo{
+		ID:            sys.LastTask.Task.ID,
+		Size:          sys.LastTask.Task.Size,
+		TotalCommands: sys.LastTask.Task.TotalCommands,
+		IOPercent:     sys.LastTask.Task.IOPercent,
+		BasePriority:  sys.LastTask.Task.BasePriority,
+		Loaded:        sys.LastTask.Loaded,
+		Reason:        sys.LastTask.Reason,
+	}
+	snap.Stats = sys.statsInfo()
+
+	snap.Ready = processInfos(sys.Regulator.Planner.ReadyQueue, sys.Time)
 	snap.Operations = operationInfos(sys.IO.Operations)
-	snap.Processes = processInfos(sys.Regulator.Table)
+	snap.Processes = processInfos(sys.Regulator.Table, sys.Time)
 	snap.InterruptLog = interruptInfos(sys.Interrupts.Log)
 	return snap
 }
 
 // ----------------------------------------------------------------------------------------
+// statsInfo собирает статистику модели в данные для индикации.
+func (sys *System) statsInfo() StatsInfo {
+	return StatsInfo{
+		CPUBusy:        sys.Stats.CPUBusy,
+		CPUIdle:        sys.Stats.CPUIdle,
+		CPUUtilization: sys.Stats.CPUUtilization(),
+		ReadyLen:       len(sys.Regulator.Planner.ReadyQueue),
+		ReadyAvg:       sys.Stats.AvgReadyQueue(),
+		ReadyMax:       sys.Stats.ReadyMax,
+		IOBusy:         len(sys.IO.Operations),
+		IOBusyAvg:      sys.Stats.AvgIOBusy(),
+		IOBusyMax:      sys.Stats.IOBusyMax,
+		Throughput:     sys.Stats.Throughput(),
+		ExecHistory:    sys.Stats.History(),
+		LoadedCount:    sys.Stats.LoadedCount,
+		AvgSize:        sys.Stats.AvgSize(),
+		AvgCommands:    sys.Stats.AvgCommands(),
+		AvgIOPercent:   sys.Stats.AvgIOPercent(),
+		AvgPriority:    sys.Stats.AvgPriority(),
+		CompletedCount: sys.Stats.CompletedCount,
+		AvgWait:        sys.Stats.AvgWait(),
+		AvgExec:        sys.Stats.AvgExec(),
+		AvgIO:          sys.Stats.AvgIO(),
+		AvgTurnaround:  sys.Stats.AvgTurnaround(),
+	}
+}
+
+// ----------------------------------------------------------------------------------------
 // processInfos преобразует список PSW в данные для индикации.
-func processInfos(psws []*process.PSW) []ProcessInfo {
+// now — текущий такт модели: по нему вычисляется оборотное время.
+func processInfos(psws []*process.PSW, now int) []ProcessInfo {
 	infos := make([]ProcessInfo, 0, len(psws))
 	for _, p := range psws {
 		infos = append(infos, ProcessInfo{
@@ -143,6 +240,10 @@ func processInfos(psws []*process.PSW) []ProcessInfo {
 			State:           int(p.State),
 			DynamicPriority: p.DynamicPriority,
 			BasePriority:    p.Task.BasePriority,
+			WaitTicks:       p.WaitTicks,
+			ExecTicks:       p.ExecTicks,
+			IOTicks:         p.IOTicks,
+			Turnaround:      now - p.LoadedAt,
 		})
 	}
 	return infos

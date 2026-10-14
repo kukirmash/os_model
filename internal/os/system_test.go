@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"os_model/internal/process"
+	"os_model/internal/stats"
 )
 
 // TestTickInvariants прогоняет модель несколько тысяч тактов и проверяет
@@ -86,6 +87,39 @@ func TestTickInvariants(t *testing.T) {
 			t.Fatalf("такт %d: выполнено %d + резидентных %d != загружено %d",
 				tick, sys.Regulator.Completed, len(sys.Regulator.Table), sys.nextTaskID)
 		}
+
+		// Инварианты статистики (лабораторная работа 6).
+		if sys.Stats.CPUBusy+sys.Stats.CPUIdle != sys.Time {
+			t.Fatalf("такт %d: занятость ЦПр %d + простой %d != время %d",
+				tick, sys.Stats.CPUBusy, sys.Stats.CPUIdle, sys.Time)
+		}
+		if len(sys.Stats.ExecHistory) > stats.HistoryLimit {
+			t.Fatalf("такт %d: в последовательности выполнения %d процессов", tick, len(sys.Stats.ExecHistory))
+		}
+		if sys.Stats.CompletedCount != sys.Regulator.Completed {
+			t.Fatalf("такт %d: статистика завершённых %d != счётчик %d",
+				tick, sys.Stats.CompletedCount, sys.Regulator.Completed)
+		}
+		if sys.Stats.LoadedCount != sys.nextTaskID {
+			t.Fatalf("такт %d: статистика загруженных %d != счётчик %d",
+				tick, sys.Stats.LoadedCount, sys.nextTaskID)
+		}
+
+		// Каждый такт процесс проводит ровно в одном состоянии, поэтому
+		// сумма его времён равна времени пребывания в системе; суммарное
+		// время на ЦПр совпадает с занятостью процессора.
+		execSum := sys.Stats.SumExec
+		for _, p := range sys.Regulator.Table {
+			if got := p.WaitTicks + p.ExecTicks + p.IOTicks; got != sys.Time-p.LoadedAt {
+				t.Fatalf("такт %d: времена процесса #%d: ожидание %d + ЦПр %d + ВВ %d != %d",
+					tick, p.ID, p.WaitTicks, p.ExecTicks, p.IOTicks, sys.Time-p.LoadedAt)
+			}
+			execSum += p.ExecTicks
+		}
+		if execSum != sys.Stats.CPUBusy {
+			t.Fatalf("такт %d: время на ЦПр по процессам %d != занятость ЦПр %d",
+				tick, execSum, sys.Stats.CPUBusy)
+		}
 	}
 
 	if sys.Regulator.Completed == 0 {
@@ -96,5 +130,35 @@ func TestTickInvariants(t *testing.T) {
 	}
 	if !sawInitIO {
 		t.Error("состояние «Инициализация IO» ни разу не наблюдалось")
+	}
+
+	// Статистика за прогон: последовательность выполнения заполнена,
+	// показатели средних значений определены.
+	if len(sys.Stats.ExecHistory) == 0 {
+		t.Error("последовательность выполнения процессов на ЦПр пуста")
+	}
+	if sys.Stats.CompletedCount == 0 {
+		t.Error("нет завершённых процессов для средних значений")
+	}
+	if util := sys.Stats.CPUUtilization(); util <= 0 || util > 100 {
+		t.Errorf("полезная загрузка ЦПр %.2f вне диапазона (0, 100]", util)
+	}
+	if sys.Stats.AvgReadyQueue() > float64(sys.Stats.ReadyMax) {
+		t.Error("средняя длина очереди больше максимальной")
+	}
+	if sys.Stats.AvgTurnaround() <= 0 {
+		t.Error("среднее оборотное время должно быть положительным")
+	}
+
+	// Снимок состояния содержит статистику и параметры нового задания.
+	snap := sys.Snapshot()
+	if snap.Stats.CompletedCount != sys.Regulator.Completed {
+		t.Error("снимок: счётчик завершённых процессов статистики не совпадает")
+	}
+	if len(snap.Stats.ExecHistory) != len(sys.Stats.ExecHistory) {
+		t.Error("снимок: последовательность выполнения процессов не совпадает")
+	}
+	if !snap.LastTask.Loaded {
+		t.Error("снимок: последнее задание должно быть загружено")
 	}
 }

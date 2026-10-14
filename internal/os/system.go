@@ -10,6 +10,7 @@ import (
 	"os_model/internal/memory"
 	"os_model/internal/process"
 	"os_model/internal/regulator"
+	"os_model/internal/stats"
 )
 
 // ----------------------------------------------------------------------------------------
@@ -62,6 +63,16 @@ const (
 )
 
 // ----------------------------------------------------------------------------------------
+// LastTaskInfo — параметры последнего сгенерированного задания: выводятся
+// подпрограммой индикации «Вывод параметров нового задания» (лабораторная
+// работа 6). Задание может быть не загружено, если не хватило ресурсов.
+type LastTaskInfo struct {
+	Task   process.Task // параметры задания
+	Loaded bool         // задание загружено в память
+	Reason string       // причина, по которой задание не загружено
+}
+
+// ----------------------------------------------------------------------------------------
 // System — ядро модели: связывает все компоненты и содержит главный цикл.
 type System struct {
 	Memory     *memory.Allocator     // супервизор памяти
@@ -69,8 +80,12 @@ type System struct {
 	Interrupts *interrupt.Supervisor // супервизор прерываний
 	CPU        *cpu.CPU              // центральный процессор
 	IO         *io.Processors        // подсистема ввода-вывода (процессоры ВВ)
+	Stats      *stats.Stats          // модуль статистики (лабораторная работа 6)
 
 	Config Config // параметры конфигурации
+
+	// LastTask — параметры последнего сгенерированного задания.
+	LastTask LastTaskInfo
 
 	Time int // глобальное время модели в тактах
 
@@ -103,11 +118,13 @@ func (sys *System) Init() {
 	}
 
 	// Создание подсистем и их связывание.
+	sys.Stats = &stats.Stats{}
 	sys.Memory = &memory.Allocator{TotalSize: sys.Config.MemorySize}
 	sys.Regulator = &regulator.Regulator{
 		Planner:      &regulator.Planner{},
 		Memory:       sys.Memory,
 		MaxProcesses: MaxProcesses,
+		Stats:        sys.Stats,
 	}
 	sys.Interrupts = &interrupt.Supervisor{}
 	sys.IO = &io.Processors{
@@ -138,15 +155,20 @@ func (sys *System) Init() {
 // память). При успехе регулировщик создаёт процесс в состоянии «Готов».
 // Возвращает true, если задание загружено.
 func (sys *System) GenerateAndLoadTask() bool {
+	// Параметры нового задания (выводятся подпрограммой индикации
+	// «Вывод параметров нового задания»).
+	task := sys.generateTask()
+	sys.LastTask = LastTaskInfo{Task: task}
+
 	// Проверка места в таблице слов состояний процессов.
 	if !sys.Regulator.FreeSlot() {
+		sys.LastTask.Reason = "нет свободной записи в таблице PSW"
 		return false
 	}
 
-	// Генерируем параметры задания и проверяем наличие доступной памяти
-	// (новое задание генерируется только при наличии свободной памяти).
-	task := sys.generateTask()
+	// Новое задание загружается только при наличии свободной памяти.
 	if !sys.Memory.CheckAvailable(task.Size) {
+		sys.LastTask.Reason = "недостаточно свободной памяти"
 		return false
 	}
 
@@ -154,8 +176,11 @@ func (sys *System) GenerateAndLoadTask() bool {
 	sys.nextTaskID++
 	task.ID = sys.nextTaskID
 	if err := sys.Memory.Allocate(task); err != nil {
+		sys.LastTask.Reason = err.Error()
 		return false
 	}
+	sys.LastTask.Task = task
+	sys.LastTask.Loaded = true
 
 	// Порождаем процесс; состояние «Готов» устанавливает регулировщик.
 	psw := &process.PSW{
@@ -217,6 +242,8 @@ func (sys *System) RunLoop() {
 //
 //	А  — инициализация цикла: выбрать процесс, сделать его активным
 //	     и восстановить слово состояния процесса;
+//	Сб — сбор статистики за такт (времена процессов, занятость ЦПр,
+//	     длины очередей) — лабораторная работа 6;
 //	Б1 — моделирование ЦПр: выполнить очередную команду активного процесса;
 //	Б2 — моделирование процессоров ВВ: один такт операций ввода-вывода
 //	     и обработка прерываний от процессоров ВВ;
@@ -233,6 +260,10 @@ func (sys *System) DoOneTick() {
 	if sys.CPU.State == cpu.StateIdle {
 		sys.dispatchProcess()
 	}
+
+	// Сб. Учёт статистики за текущий такт: состояние фиксируется после
+	// диспетчеризации и до выполнения команды.
+	sys.collectStats()
 
 	// Б1. Моделирование центрального процессора.
 	sys.CPU.Tick()
@@ -267,8 +298,23 @@ func (sys *System) dispatchProcess() bool {
 		return false
 	}
 
+	sys.Stats.OnDispatch(p.ID)
 	sys.CPU.ContextSwitch(p)
 	return true
+}
+
+// ----------------------------------------------------------------------------------------
+// collectStats — подпрограмма сбора статистики за такт (лабораторная
+// работа 6): занятость центрального процессора, длины очередей и времена
+// процессов по их состояниям.
+func (sys *System) collectStats() {
+	sys.Stats.Collect(
+		sys.Time,
+		sys.CPU.State == cpu.StateWorking,
+		sys.Regulator.Table,
+		len(sys.Regulator.Planner.ReadyQueue),
+		len(sys.IO.Operations),
+	)
 }
 
 // ----------------------------------------------------------------------------------------

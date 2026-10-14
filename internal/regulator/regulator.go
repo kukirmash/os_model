@@ -14,6 +14,7 @@ package regulator
 import (
 	"os_model/internal/memory"
 	"os_model/internal/process"
+	"os_model/internal/stats"
 )
 
 // ----------------------------------------------------------------------------------------
@@ -39,6 +40,10 @@ type Regulator struct {
 	Memory       *memory.Allocator // супервизор памяти: освобождается при завершении
 	MaxProcesses int               // число записей в таблице слов состояний процессов
 
+	// Stats — модуль статистики: накапливает входные и выходные параметры
+	// процессов (лабораторная работа 6). Может быть nil.
+	Stats *stats.Stats
+
 	Table     []*process.PSW // таблица слов состояний процессов (резидентные процессы)
 	Completed int            // число выполненных (завершённых) заданий
 }
@@ -57,6 +62,9 @@ func (r *Regulator) Process(p *process.PSW, event Event) bool {
 		p.State = process.StateReady
 		r.Table = append(r.Table, p)
 		r.Planner.Add(p)
+		if r.Stats != nil {
+			r.Stats.OnLoad(p)
+		}
 
 	case EventActivate:
 		// Планировщик выбрал процесс для выполнения на процессоре.
@@ -100,6 +108,9 @@ func (r *Regulator) Process(p *process.PSW, event Event) bool {
 		r.removeFromTable(p)
 		p.State = process.StateNone
 		r.Completed++
+		if r.Stats != nil {
+			r.Stats.OnComplete(p)
+		}
 
 	default:
 		return false

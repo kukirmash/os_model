@@ -2,147 +2,223 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Модель ОС — вариант 11</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="app">
-    <!-- Шапка: название, время, скорость, управление -->
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-logo">ОС</div>
-        <div class="brand-text">
-          <h1>Модель операционной системы</h1>
-          <p>Вариант 11 · относительные и динамические приоритеты</p>
-        </div>
+
+    <!-- Постоянная информация: заголовок, состояние модели, язык управления -->
+    <header class="masthead">
+      <div class="masthead-title">
+        <h1>Модель операционной системы</h1>
+        <p>Вариант 11 — относительные и динамические приоритеты</p>
       </div>
 
-      <div class="topbar-metrics">
-        <div class="metric">
-          <span class="metric-label">Модельное время</span>
-          <span class="metric-value mono" id="m-time">0</span>
-          <span class="metric-unit">такт</span>
+      <dl class="run-state">
+        <div>
+          <dt>Модельное время</dt>
+          <dd class="mono" id="m-time">0</dd>
+          <span class="unit">такт</span>
         </div>
-        <div class="metric">
-          <span class="metric-label">Скорость</span>
-          <span class="metric-value mono" id="m-speed">10</span>
-          <span class="metric-unit">такт/с</span>
+        <div>
+          <dt>Скорость</dt>
+          <dd class="mono" id="m-speed">10</dd>
+          <span class="unit">такт/с</span>
         </div>
-        <div class="metric metric-status">
-          <span class="metric-label">Состояние</span>
-          <span class="pill st-active" id="m-status">Работа</span>
+        <div>
+          <dt>Состояние</dt>
+          <dd class="state st-active" id="m-status">Работа</dd>
         </div>
-      </div>
+      </dl>
 
       <div class="controls">
-        <button class="btn" id="btn-pause" title="Пауза / продолжить (Space)">Пауза</button>
-        <button class="btn btn-icon" id="btn-slower" title="Уменьшить скорость (−)">−</button>
-        <button class="btn btn-icon" id="btn-faster" title="Увеличить скорость (+)">+</button>
-        <button class="btn btn-danger" id="btn-quit" title="Завершить моделирование (Q)">Завершить</button>
+        <button type="button" id="btn-pause">Пауза</button>
+        <button type="button" id="btn-slower" title="Уменьшить скорость (−)">−</button>
+        <button type="button" id="btn-faster" title="Увеличить скорость (+)">+</button>
+        <button type="button" id="btn-quit" class="danger" title="Завершить моделирование (Q)">Завершить</button>
       </div>
+
+      <p class="control-help">
+        Управление: <kbd>Space</kbd> — пауза / продолжить,
+        <kbd>+</kbd> <kbd>−</kbd> — скорость ± 10 %,
+        <kbd>Q</kbd> — завершить моделирование
+      </p>
     </header>
 
-    <!-- Верхний ряд: ЦПр, память, система, управление -->
-    <section class="grid grid-top">
-      <article class="card">
-        <header class="card-head">
-          <h2>Центральный процессор</h2>
-          <span class="pill st-none" id="cpu-state">Ожидание</span>
-        </header>
-        <div class="card-body">
-          <div class="kv"><span class="kv-label">Активный процесс</span><b class="mono" id="cpu-active">—</b></div>
-          <div class="kv kv-col"><span class="kv-label">Выполняемая команда</span><b class="mono" id="cpu-command">—</b></div>
-          <p class="hint">Фон-неймановский цикл: выборка → PC + 1 → декодирование → АЛУ</p>
-        </div>
-      </article>
+    <main class="grid">
 
-      <article class="card">
-        <header class="card-head">
-          <h2>Память</h2>
-          <span class="pill st-ready" id="mem-percent">0 %</span>
+      <!-- Вывод параметров системы -->
+      <section class="panel span-5">
+        <header class="panel-head">
+          <h2>Параметры системы</h2>
         </header>
-        <div class="card-body">
-          <div class="bar"><div class="bar-fill" id="mem-bar"></div></div>
-          <div class="kv"><span class="kv-label">Занято</span><b class="mono" id="mem-used">0</b></div>
-          <div class="kv"><span class="kv-label">Свободно</span><b class="mono" id="mem-free">0</b></div>
-          <div class="kv"><span class="kv-label">Всего</span><b class="mono" id="mem-total">0</b></div>
-          <p class="hint">Свободно = Всего − Занято</p>
-        </div>
-      </article>
+        <div class="panel-body">
+          <dl class="kv two-col">
+            <div><dt>Загружено заданий</dt><dd class="mono" id="sys-generated">0</dd></div>
+            <div><dt>Выполнено заданий</dt><dd class="mono" id="sys-completed">0</dd></div>
+            <div><dt>Таблица PSW</dt><dd class="mono" id="sys-table">0 / 16</dd></div>
+            <div><dt>Прерываний обработано</dt><dd class="mono" id="sys-int">0</dd></div>
+            <div><dt>Очередь готовности, текущая / средняя / макс.</dt><dd class="mono" id="sys-ready">0 / 0 / 0</dd></div>
+            <div><dt>Процессоры ВВ, занято / среднее / макс.</dt><dd class="mono" id="sys-io">0 / 0 / 0</dd></div>
+            <div><dt>Производительность, заданий на 1000 тактов</dt><dd class="mono" id="sys-throughput">0</dd></div>
+            <div><dt>Свободная память</dt><dd class="mono" id="mem-free">0</dd></div>
+          </dl>
 
-      <article class="card">
-        <header class="card-head">
-          <h2>Система</h2>
-        </header>
-        <div class="card-body">
-          <div class="kv"><span class="kv-label">Загружено заданий</span><b class="mono" id="sys-generated">0</b></div>
-          <div class="kv"><span class="kv-label">Выполнено заданий</span><b class="mono" id="sys-completed">0</b></div>
-          <div class="kv"><span class="kv-label">В очереди готовности</span><b class="mono" id="sys-ready">0</b></div>
-          <div class="kv"><span class="kv-label">Операций ввода-вывода</span><b class="mono" id="sys-io">0</b></div>
-          <div class="kv"><span class="kv-label">Таблица PSW</span><b class="mono" id="sys-table">0 / 16</b></div>
-        </div>
-      </article>
-
-      <article class="card">
-        <header class="card-head">
-          <h2>Управление</h2>
-        </header>
-        <div class="card-body">
-          <div class="controls-list">
-            <div class="kv"><kbd>Space</kbd><span>пауза / продолжить</span></div>
-            <div class="kv"><kbd>+</kbd><kbd>−</kbd><span>скорость ± 10 %</span></div>
-            <div class="kv"><kbd>Q</kbd><span>завершить моделирование</span></div>
+          <div class="memory">
+            <div class="meter"><i id="mem-bar"></i></div>
+            <span class="memory-text mono"><span id="mem-used">0</span> / <span id="mem-total">0</span> ед. занято, <span id="mem-percent">0 %</span></span>
           </div>
-          <p class="hint">Скорость модели: 0,1 … 1000 такт/с.<br />Директива завершения останавливает ядро.</p>
         </div>
-      </article>
-    </section>
+      </section>
 
-    <!-- ЦПр, процессоры ВВ и прерывания -->
-    <section class="grid grid-queues">
-      <article class="card">
-        <header class="card-head">
+      <!-- Вывод параметров центрального процессора -->
+      <section class="panel span-4">
+        <header class="panel-head">
+          <h2>Параметры центрального процессора</h2>
+          <span class="state st-none" id="cpu-state">Ожидание</span>
+        </header>
+        <div class="panel-body">
+          <dl class="kv">
+            <div><dt>Активный процесс</dt><dd class="mono" id="cpu-active">—</dd></div>
+            <div><dt>Выполняемая команда</dt><dd class="mono" id="cpu-command">—</dd></div>
+            <div><dt>Занят / простой, тактов</dt><dd class="mono" id="cpu-busy">0 / 0</dd></div>
+            <div><dt>Полезная загрузка</dt><dd class="mono" id="cpu-load">0 %</dd></div>
+          </dl>
+          <div class="meter"><i id="cpu-load-bar"></i></div>
+        </div>
+      </section>
+
+      <!-- Вывод параметров нового задания -->
+      <section class="panel span-3">
+        <header class="panel-head">
+          <h2>Параметры нового задания</h2>
+          <span class="state st-none" id="task-status">—</span>
+        </header>
+        <div class="panel-body">
+          <dl class="kv two-col">
+            <div><dt>Номер</dt><dd class="mono" id="task-id">—</dd></div>
+            <div><dt>Приоритет</dt><dd class="mono" id="task-priority">—</dd></div>
+            <div><dt>Размер</dt><dd class="mono" id="task-size">—</dd></div>
+            <div><dt>Команд</dt><dd class="mono" id="task-commands">—</dd></div>
+            <div><dt>Команд ВВ</dt><dd class="mono" id="task-io">—</dd></div>
+          </dl>
+          <p class="hint hint-error" id="task-reason" hidden></p>
+          <p class="hint" id="task-ranges">—</p>
+        </div>
+      </section>
+
+      <!-- Вывод параметров процессов (все процессы на одном окне) -->
+      <section class="panel span-12">
+        <header class="panel-head">
+          <h2>Параметры процессов (таблица PSW)</h2>
+          <span class="badge mono" id="proc-count">0 / 16</span>
+        </header>
+        <div class="panel-body">
+          <div class="table-wrap">
+            <table class="table" id="proc-table">
+              <thead>
+                <tr>
+                  <th>№</th><th>Состояние</th><th>PC</th><th>Команд</th><th>Размер</th>
+                  <th>ВВ, %</th><th>Приоритет база → динамика</th>
+                  <th>Ожидание</th><th>ЦПр</th><th>ВВ</th><th>Оборот</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="empty" id="proc-empty">Нет загруженных процессов</div>
+        </div>
+      </section>
+
+      <!-- Вывод средних значений параметров процессов -->
+      <section class="panel span-5">
+        <header class="panel-head">
+          <h2>Средние значения параметров процессов</h2>
+        </header>
+        <div class="panel-body">
+          <div class="avg-block">
+            <h3>Входные параметры <span class="badge mono" id="avg-loaded-count">0 заданий</span></h3>
+            <dl class="kv two-col">
+              <div><dt>Размер</dt><dd class="mono" id="avg-size">0</dd></div>
+              <div><dt>Команд</dt><dd class="mono" id="avg-commands">0</dd></div>
+              <div><dt>Команд ВВ</dt><dd class="mono" id="avg-io-percent">0 %</dd></div>
+              <div><dt>Базовый приоритет</dt><dd class="mono" id="avg-priority">0</dd></div>
+            </dl>
+          </div>
+          <div class="avg-block">
+            <h3>Выходные параметры <span class="badge mono" id="avg-completed-count">0 процессов</span></h3>
+            <dl class="kv two-col">
+              <div><dt>Время ожидания, тактов</dt><dd class="mono" id="avg-wait">0</dd></div>
+              <div><dt>Время выполнения, тактов</dt><dd class="mono" id="avg-exec">0</dd></div>
+              <div><dt>Время ВВ, тактов</dt><dd class="mono" id="avg-io">0</dd></div>
+              <div><dt>Оборотное время, тактов</dt><dd class="mono" id="avg-turnaround">0</dd></div>
+            </dl>
+          </div>
+        </div>
+      </section>
+
+      <!-- Вывод последовательности выполнения процессов на процессоре -->
+      <section class="panel span-7">
+        <header class="panel-head">
+          <h2>Последовательность выполнения процессов на процессоре</h2>
+          <span class="badge mono" id="history-count">0 / 16</span>
+        </header>
+        <div class="panel-body">
+          <div class="history" id="exec-history"></div>
+          <p class="hint">
+            Номера процессов в порядке их выбора планировщиком на ЦПр; хранятся
+            16 последних. Повторный номер — процесс вернулся на процессор после
+            ввода-вывода или ожидания.
+          </p>
+        </div>
+      </section>
+
+      <!-- Очередь готовности -->
+      <section class="panel span-5">
+        <header class="panel-head">
           <h2>Очередь готовности</h2>
           <span class="badge mono" id="ready-count">0</span>
         </header>
-        <div class="card-body">
+        <div class="panel-body">
           <div class="table-wrap">
             <table class="table" id="ready-table">
               <thead>
-                <tr><th>ID</th><th>Состояние</th><th>PC</th><th>Размер</th><th>Динамический приоритет</th></tr>
+                <tr><th>№</th><th>Состояние</th><th>PC</th><th>Размер</th><th>Динамический приоритет</th></tr>
               </thead>
               <tbody></tbody>
             </table>
           </div>
           <div class="empty" id="ready-empty">Очередь пуста</div>
         </div>
-      </article>
+      </section>
 
-      <article class="card">
-        <header class="card-head">
+      <!-- Процессоры ввода-вывода -->
+      <section class="panel span-4">
+        <header class="panel-head">
           <h2>Процессоры ввода-вывода</h2>
           <span class="badge mono" id="io-count">0</span>
         </header>
-        <div class="card-body">
+        <div class="panel-body">
           <div class="table-wrap">
             <table class="table" id="io-table">
               <thead>
-                <tr><th>Процессор</th><th>Процесс</th><th>Состояние</th><th>Тактов</th><th>Прогресс IO</th></tr>
+                <tr><th>Процессор</th><th>Процесс</th><th>Состояние</th><th>Тактов</th><th>Прогресс</th></tr>
               </thead>
               <tbody></tbody>
             </table>
           </div>
           <div class="empty" id="io-empty">Нет активных операций ввода-вывода</div>
         </div>
-      </article>
+      </section>
 
-      <article class="card">
-        <header class="card-head">
+      <!-- Прерывания -->
+      <section class="panel span-3">
+        <header class="panel-head">
           <h2>Прерывания</h2>
           <span class="badge mono" id="int-count">0</span>
         </header>
-        <div class="card-body">
+        <div class="panel-body">
           <div class="table-wrap">
             <table class="table" id="int-table">
               <thead>
@@ -152,36 +228,14 @@
             </table>
           </div>
           <div class="empty" id="int-empty">Прерываний ещё не было</div>
-          <p class="hint">Прерывание формируется процессором ВВ по окончании операции; супервизор прерываний через регулировщик переводит процесс в «Готов».</p>
         </div>
-      </article>
-    </section>
+      </section>
 
-    <!-- Таблица слов состояний процессов -->
-    <section class="card">
-      <header class="card-head">
-        <h2>Таблица процессов (PSW)</h2>
-        <span class="badge" id="task-params">параметры генерации</span>
-      </header>
-      <div class="card-body">
-        <div class="table-wrap">
-          <table class="table" id="proc-table">
-            <thead>
-              <tr>
-                <th>ID</th><th>Состояние</th><th>PC</th><th>Команд</th><th>Размер</th>
-                <th>Приоритет (база → динамика)</th><th>IO %</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <div class="empty" id="proc-empty">Нет загруженных процессов</div>
-      </div>
-    </section>
+    </main>
 
     <footer class="footer">
-      <span>Модули: <code>process</code> → <code>memory</code> → <code>regulator</code> → <code>cpu</code> / <code>io</code> → <code>interrupt</code> → <code>os</code></span>
-      <span>Выбор: <code>P = max DynamicPriority</code> · Состояния меняет только регулировщик: <code>Process(p, event)</code></span>
+      <span>Диспетчеризация: <code>P = argmax(DynamicPriority)</code>, выбор только при освобождении ЦПр · приоритет в очереди: <code>DynamicPriority += Size</code> каждый такт</span>
+      <span>Полезная загрузка ЦПр = <code>T<sub>занят</sub> / T</code> · производительность = <code>N<sub>выполнено</sub> / T · 1000</code> · оборотное время = <code>t<sub>завершения</sub> − t<sub>загрузки</sub></code></span>
     </footer>
   </div>
 
