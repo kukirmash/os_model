@@ -8,34 +8,10 @@ import (
 	"os_model/internal/interrupt"
 	"os_model/internal/io"
 	"os_model/internal/memory"
+	"os_model/internal/params"
 	"os_model/internal/process"
 	"os_model/internal/regulator"
 	"os_model/internal/stats"
-)
-
-// ----------------------------------------------------------------------------------------
-// Параметры модели по умолчанию (если соответствующие поля Config не заполнены).
-const (
-	DefaultMemorySize     = 8192 // общий объём моделируемой памяти
-	DefaultTickDurationMs = 1    // начальная длительность такта, мс
-	DefaultIOMaxDuration  = 10   // максимальная длительность ввода-вывода, тактов
-)
-
-// ----------------------------------------------------------------------------------------
-// Параметры генерации заданий (значения по умолчанию на этапе компиляции;
-// на этапе 8 будут читаться из файла параметров).
-const (
-	TaskSizeMin = 100 // размер задания, единиц памяти
-	TaskSizeMax = 500
-
-	TaskCommandsMin = 10 // число команд задания
-	TaskCommandsMax = 20
-
-	TaskIOPercentMin = 0 // процент команд ввода-вывода
-	TaskIOPercentMax = 50
-
-	TaskBasePriorityMin = 1 // базовый приоритет
-	TaskBasePriorityMax = 10
 )
 
 // ----------------------------------------------------------------------------------------
@@ -84,6 +60,18 @@ type System struct {
 
 	Config Config // параметры конфигурации
 
+	// Params — диапазоны входных параметров из JSON-файла (лабораторная работа 8).
+	Params params.Set
+
+	// Rand — единый генератор псевдослучайных чисел модели. Фиксированное
+	// зерно обеспечивает повторяемость параметров, заданий и команд.
+	Rand *rand.Rand
+
+	// Сведения о файле параметров для индикации.
+	ParamsPath   string
+	ParamsLoaded bool
+	ParamsError  string
+
 	// LastTask — параметры последнего сгенерированного задания.
 	LastTask LastTaskInfo
 
@@ -111,18 +99,44 @@ type System struct {
 // Init инициализирует структуры модели по значениям полей Config
 // до запуска главного цикла.
 func (sys *System) Init() {
-	// Значения по умолчанию для незаполненной (или невалидной) конфигурации.
-	if sys.Config.MemorySize <= 0 {
-		sys.Config.MemorySize = DefaultMemorySize
+	// Если файл параметров не был загружен, используются значения по умолчанию.
+	if sys.Params.IsZero() {
+		sys.Params = params.Default()
 	}
-	if sys.Config.TickDurationMs <= 0 {
-		sys.Config.TickDurationMs = DefaultTickDurationMs
-	}
-	if sys.Config.IOMaxDuration <= 0 {
-		sys.Config.IOMaxDuration = DefaultIOMaxDuration
+	if sys.Params.Seed == 0 {
+		sys.Params.Seed = params.DefaultSeed
 	}
 
-	// Длительности системных действий: явно заданные или по умолчанию.
+	// Единый генератор для системных параметров, заданий и команд.
+	if sys.Rand == nil {
+		seed := sys.Params.Seed
+		sys.Rand = rand.New(rand.NewPCG(seed, seed))
+	}
+
+	// Генерируем системные параметры по диапазонам из файла. Явно заданные
+	// поля Config сохраняют приоритет — это используется в тестах.
+	values := sys.Params.GenerateSystem(sys.Rand)
+	if sys.Config.MemorySize <= 0 {
+		sys.Config.MemorySize = values.MemorySize
+	}
+	if sys.Config.TickDurationMs <= 0 {
+		sys.Config.TickDurationMs = values.TickDurationMs
+	}
+	if sys.Config.IOMaxDuration <= 0 {
+		sys.Config.IOMaxDuration = values.IOMaxDuration
+	}
+	if sys.Config.SystemCosts == nil {
+		costs := regulator.Costs{
+			Load:        values.Costs.Load,
+			Dispatch:    values.Costs.Dispatch,
+			IOInit:      values.Costs.IOInit,
+			IOInterrupt: values.Costs.IOInterrupt,
+			Terminate:   values.Costs.Terminate,
+		}
+		sys.Config.SystemCosts = &costs
+	}
+
+	// Длительности системных действий: явно заданные или сгенерированные.
 	costs := regulator.DefaultCosts()
 	if sys.Config.SystemCosts != nil {
 		costs = *sys.Config.SystemCosts
@@ -148,6 +162,7 @@ func (sys *System) Init() {
 		Processes:       sys.Regulator,
 		IOMaxDuration:   sys.Config.IOMaxDuration,
 		FixedIODuration: sys.Config.FixedIODuration,
+		Rand:            sys.Rand,
 	}
 
 	if sys.Directives == nil {
@@ -391,11 +406,12 @@ func (sys *System) HandleInterrupts() {
 // generateTask генерирует параметры нового задания в заданных диапазонах
 // (без идентификатора: идентификатор присваивается загруженному заданию).
 func (sys *System) generateTask() process.Task {
+	values := sys.Params.Task.GenerateTask(sys.Rand)
 	return process.Task{
-		Size:          randomInRange(TaskSizeMin, TaskSizeMax),
-		TotalCommands: randomInRange(TaskCommandsMin, TaskCommandsMax),
-		IOPercent:     randomInRange(TaskIOPercentMin, TaskIOPercentMax),
-		BasePriority:  randomInRange(TaskBasePriorityMin, TaskBasePriorityMax),
+		Size:          values.Size,
+		TotalCommands: values.Commands,
+		IOPercent:     values.IOPercent,
+		BasePriority:  values.BasePriority,
 	}
 }
 
@@ -450,15 +466,6 @@ func (sys *System) sleep() {
 		return
 	}
 	time.Sleep(time.Duration(float64(time.Second) / sys.Speed))
-}
-
-// ----------------------------------------------------------------------------------------
-// randomInRange возвращает случайное число из диапазона [min, max].
-func randomInRange(min, max int) int {
-	if max <= min {
-		return min
-	}
-	return min + rand.IntN(max-min+1)
 }
 
 // ----------------------------------------------------------------------------------------

@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	stdos "os"
 	"time"
 
 	"os_model/internal/os"
+	"os_model/internal/params"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -29,12 +31,26 @@ const uiRefreshInterval = 50 * time.Millisecond
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
+	// Файл параметров читается один раз при запуске. При ошибке модель
+	// продолжает работу со значениями по умолчанию, а причина выводится
+	// в интерфейсе.
+	path := stdos.Getenv("OS_MODEL_PARAMS")
+	if path == "" {
+		path = params.DefaultPath
+	}
+	set, err := params.ReadFile(path)
+	loaded := err == nil
+	if err != nil {
+		set = params.Default()
+	}
+
 	a.system = &os.System{
-		Config: os.Config{
-			MemorySize:     8192,
-			TickDurationMs: 100,
-			IOMaxDuration:  10,
-		},
+		Params:       set,
+		ParamsPath:   path,
+		ParamsLoaded: loaded,
+	}
+	if err != nil {
+		a.system.ParamsError = err.Error()
 	}
 	a.system.Init()
 

@@ -3,6 +3,7 @@ package os
 import (
 	"os_model/internal/interrupt"
 	"os_model/internal/io"
+	"os_model/internal/params"
 	"os_model/internal/process"
 	"os_model/internal/stats"
 )
@@ -67,14 +68,38 @@ type UIInterruptInfo struct {
 // ----------------------------------------------------------------------------------------
 // UITaskParams — диапазоны генерации заданий (входные параметры модели).
 type UITaskParams struct {
-	SizeMin      int `json:"sizeMin"`
-	SizeMax      int `json:"sizeMax"`
-	CommandsMin  int `json:"commandsMin"`
-	CommandsMax  int `json:"commandsMax"`
-	IOPercentMin int `json:"ioPercentMin"`
-	IOPercentMax int `json:"ioPercentMax"`
-	PriorityMin  int `json:"priorityMin"`
-	PriorityMax  int `json:"priorityMax"`
+	SizeMin       int `json:"sizeMin"`
+	SizeMax       int `json:"sizeMax"`
+	SizeStep      int `json:"sizeStep"`
+	CommandsMin   int `json:"commandsMin"`
+	CommandsMax   int `json:"commandsMax"`
+	CommandsStep  int `json:"commandsStep"`
+	IOPercentMin  int `json:"ioPercentMin"`
+	IOPercentMax  int `json:"ioPercentMax"`
+	IOPercentStep int `json:"ioPercentStep"`
+	PriorityMin   int `json:"priorityMin"`
+	PriorityMax   int `json:"priorityMax"`
+	PriorityStep  int `json:"priorityStep"`
+}
+
+// ----------------------------------------------------------------------------------------
+// UIParamRow — строка таблицы входных параметров из файла.
+type UIParamRow struct {
+	Name    string `json:"name"`
+	Min     int    `json:"min"`
+	Max     int    `json:"max"`
+	Step    int    `json:"step"`
+	Comment string `json:"comment"`
+}
+
+// ----------------------------------------------------------------------------------------
+// UIParamsInfo — сведения о JSON-файле параметров.
+type UIParamsInfo struct {
+	File   string       `json:"file"`
+	Loaded bool         `json:"loaded"`
+	Error  string       `json:"error"`
+	Seed   uint64       `json:"seed"`
+	Rows   []UIParamRow `json:"rows"`
 }
 
 // ----------------------------------------------------------------------------------------
@@ -188,6 +213,7 @@ type UISnapshot struct {
 	Processes  []UIProcessInfo   `json:"processes"`  // таблица PSW
 
 	TaskParams UITaskParams `json:"taskParams"`
+	Params     UIParamsInfo `json:"params"`   // входные параметры из файла (лаб. 8)
 	LastTask   UITaskInfo   `json:"lastTask"` // параметры нового задания
 	Costs      UICostsInfo  `json:"costs"`    // системные затраты (лаб. 7)
 	Stats      UIStatsInfo  `json:"stats"`    // статистика модели (лаб. 6–7)
@@ -209,15 +235,20 @@ func (sys *System) ViewSnapshot() UISnapshot {
 		InterruptsHandled: sys.Interrupts.Handled,
 		MaxProcesses:      MaxProcesses,
 		TaskParams: UITaskParams{
-			SizeMin:      TaskSizeMin,
-			SizeMax:      TaskSizeMax,
-			CommandsMin:  TaskCommandsMin,
-			CommandsMax:  TaskCommandsMax,
-			IOPercentMin: TaskIOPercentMin,
-			IOPercentMax: TaskIOPercentMax,
-			PriorityMin:  TaskBasePriorityMin,
-			PriorityMax:  TaskBasePriorityMax,
+			SizeMin:       sys.Params.Task.Size.Min,
+			SizeMax:       sys.Params.Task.Size.Max,
+			SizeStep:      sys.Params.Task.Size.Step,
+			CommandsMin:   sys.Params.Task.Commands.Min,
+			CommandsMax:   sys.Params.Task.Commands.Max,
+			CommandsStep:  sys.Params.Task.Commands.Step,
+			IOPercentMin:  sys.Params.Task.IOPercent.Min,
+			IOPercentMax:  sys.Params.Task.IOPercent.Max,
+			IOPercentStep: sys.Params.Task.IOPercent.Step,
+			PriorityMin:   sys.Params.Task.BasePriority.Min,
+			PriorityMax:   sys.Params.Task.BasePriority.Max,
+			PriorityStep:  sys.Params.Task.BasePriority.Step,
 		},
+		Params: uiParamsInfo(sys.ParamsPath, sys.ParamsLoaded, sys.ParamsError, sys.Params),
 		Costs: UICostsInfo{
 			Load:        sys.Regulator.Costs.Load,
 			Dispatch:    sys.Regulator.Costs.Dispatch,
@@ -253,6 +284,41 @@ func (sys *System) ViewSnapshot() UISnapshot {
 	view.Processes = uiProcessInfos(sys.Regulator.Table, sys.Time)
 	view.InterruptLog = uiInterruptInfos(sys.Interrupts.Log)
 	return view
+}
+
+// ----------------------------------------------------------------------------------------
+// uiParamsInfo формирует данные о входных параметрах для индикации.
+func uiParamsInfo(path string, loaded bool, errText string, set params.Set) UIParamsInfo {
+	row := func(name string, p params.Param) UIParamRow {
+		return UIParamRow{
+			Name:    name,
+			Min:     p.Min,
+			Max:     p.Max,
+			Step:    p.Step,
+			Comment: p.Comment,
+		}
+	}
+
+	return UIParamsInfo{
+		File:   path,
+		Loaded: loaded,
+		Error:  errText,
+		Seed:   set.Seed,
+		Rows: []UIParamRow{
+			row("Объём памяти", set.System.MemorySize),
+			row("Длительность такта", set.System.TickDurationMs),
+			row("Максимальная длительность ВВ", set.System.IOMaxDuration),
+			row("Затраты на загрузку", set.System.Costs.Load),
+			row("Затраты на переключение", set.System.Costs.Dispatch),
+			row("Затраты на инициализацию ВВ", set.System.Costs.IOInit),
+			row("Затраты на прерывание ВВ", set.System.Costs.IOInterrupt),
+			row("Затраты на завершение", set.System.Costs.Terminate),
+			row("Размер задания", set.Task.Size),
+			row("Число команд", set.Task.Commands),
+			row("Процент команд ВВ", set.Task.IOPercent),
+			row("Базовый приоритет", set.Task.BasePriority),
+		},
+	}
 }
 
 // ----------------------------------------------------------------------------------------

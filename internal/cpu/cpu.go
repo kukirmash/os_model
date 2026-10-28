@@ -97,6 +97,10 @@ type CPU struct {
 	// детерминированных тестов). 0 означает случайную длительность.
 	FixedIODuration int
 
+	// Rand — общий с ядром генератор псевдослучайных чисел. Единый генератор
+	// обеспечивает повторяемость последовательности команд при каждом запуске.
+	Rand *rand.Rand
+
 	// OperandMemory — аппаратная память, в которой хранятся операнды
 	// (инициализируется лениво).
 	OperandMemory []int
@@ -170,16 +174,16 @@ func (cpu *CPU) Fetch() Command {
 	}
 
 	// Команда ввода-вывода
-	if rand.IntN(100) < ap.Task.IOPercent {
+	if cpu.randomIntN(100) < ap.Task.IOPercent {
 		return Command{Code: OpIO, Duration: cpu.newIODuration()}
 	}
 
 	// Вычислительная команда: код операции и математические адреса операндов.
 	computeOps := [...]Operation{OpAdd, OpSub, OpMul, OpDiv}
 	return Command{
-		Code:     computeOps[rand.IntN(len(computeOps))],
-		Address1: rand.IntN(OperandMemorySize),
-		Address2: rand.IntN(OperandMemorySize),
+		Code:     computeOps[cpu.randomIntN(len(computeOps))],
+		Address1: cpu.randomIntN(OperandMemorySize),
+		Address2: cpu.randomIntN(OperandMemorySize),
 	}
 }
 
@@ -271,7 +275,20 @@ func (cpu *CPU) newIODuration() int {
 	if maxDuration < 1 {
 		maxDuration = 1
 	}
-	return 1 + rand.IntN(maxDuration)
+	return 1 + cpu.randomIntN(maxDuration)
+}
+
+// ----------------------------------------------------------------------------------------
+// randomIntN возвращает случайное число из диапазона [0, n).
+// Используется общий генератор ядра; при его отсутствии — глобальный.
+func (cpu *CPU) randomIntN(n int) int {
+	if n <= 0 {
+		return 0
+	}
+	if cpu.Rand != nil {
+		return cpu.Rand.IntN(n)
+	}
+	return rand.IntN(n)
 }
 
 // ----------------------------------------------------------------------------------------

@@ -237,8 +237,35 @@ function uiRenderTask(view) {
   const tp = view.taskParams ?? {};
   uiSetText(
     "task-ranges",
-    `Диапазоны генерации: размер ${tp.sizeMin}–${tp.sizeMax} ед. · команд ${tp.commandsMin}–${tp.commandsMax} · ВВ ${tp.ioPercentMin}–${tp.ioPercentMax} % · приоритет ${tp.priorityMin}–${tp.priorityMax}`
+    `Диапазоны генерации: размер ${tp.sizeMin}–${tp.sizeMax} (шаг ${tp.sizeStep}) ед. · команд ${tp.commandsMin}–${tp.commandsMax} (шаг ${tp.commandsStep}) · ВВ ${tp.ioPercentMin}–${tp.ioPercentMax} % (шаг ${tp.ioPercentStep} %) · приоритет ${tp.priorityMin}–${tp.priorityMax} (шаг ${tp.priorityStep})`
   );
+}
+
+function uiRenderParams(view) {
+  const info = view.params ?? {};
+  const rows = info.rows ?? [];
+  const status = uiById("params-status");
+
+  if (info.loaded) {
+    status.textContent = "Загружен";
+    status.className = "state st-active";
+  } else {
+    status.textContent = "По умолчанию";
+    status.className = "state st-blocked";
+  }
+
+  const error = info.error ? ` · ${info.error}` : "";
+  uiSetText("params-file", `Файл: ${info.file ?? "—"} · seed: ${info.seed ?? 0}${error}`);
+
+  const tbody = uiById("params-table").querySelector("tbody");
+  tbody.innerHTML = rows.map((r) => `
+    <tr>
+      <td>${r.name}</td>
+      <td class="mono">${r.min}</td>
+      <td class="mono">${r.max}</td>
+      <td class="mono">${r.step}</td>
+      <td>${r.comment || "—"}</td>
+    </tr>`).join("");
 }
 
 function uiRenderAverages(view) {
@@ -404,6 +431,7 @@ function uiRenderView(view) {
   uiRenderSystem(view);
   uiRenderCPU(view);
   uiRenderTask(view);
+  uiRenderParams(view);
   uiRenderAverages(view);
   uiRenderComparison(view);
   uiRenderCosts(view);
