@@ -5,6 +5,10 @@
 // выполнения процессов, длины очередей, полезная загрузка процессора,
 // производительность системы и средние значения параметров процессов.
 //
+// В лабораторной работе 7 добавлен расчёт времени выполнения задания в
+// однопрограммном и мультипрограммном режимах, системных затрат и
+// производительности по сравнению с однопрограммной ОС.
+//
 // Времена процесса (ожидание, выполнение, ввод-вывод) хранятся в слове
 // состояния процесса — см. поля PSW в пакете process. Пакет stats хранит
 // суммарные значения по системе и накопители для вычисления средних.
@@ -16,6 +20,19 @@ import "os_model/internal/process"
 // HistoryLimit — сколько последних процессов, выполнявшихся на процессоре,
 // хранится для индикации (лабораторная работа 6).
 const HistoryLimit = 16
+
+// ----------------------------------------------------------------------------------------
+// SystemAction — вид системного действия, время которого учитывается
+// в лабораторной работе 7.
+type SystemAction int
+
+const (
+	SystemLoad       SystemAction = iota // загрузка задания
+	SystemDispatch                       // выбор процесса на ЦПр
+	SystemIOInit                         // логическая инициализация ВВ
+	SystemIOComplete                     // обслуживание прерывания ВВ
+	SystemTerminate                      // завершение задания
+)
 
 // ----------------------------------------------------------------------------------------
 // Stats — накопленная статистика модели.
@@ -51,6 +68,23 @@ type Stats struct {
 	SumExec        int
 	SumIO          int
 	SumTurnaround  int
+
+	// Системные затраты (лабораторная работа 7). SystemTicks — суммарное
+	// время системных действий, учтённое один раз на каждое действие.
+	// Остальные поля — разбивка по видам действий для индикации и тестов.
+	SystemTicks           int
+	SystemLoadTicks       int
+	SystemDispatchTicks   int
+	SystemIOInitTicks     int
+	SystemIOCompleteTicks int
+	SystemTerminateTicks  int
+
+	// Накопители выходных параметров завершённых процессов для сравнения
+	// однопрограммного и мультипрограммного режимов (лабораторная работа 7).
+	SumMono   int     // Σ T_mono завершённых процессов
+	SumMulti  int     // Σ T_multi завершённых процессов
+	SumDExe   float64 // Σ D_exe завершённых процессов, %
+	SumDReady float64 // Σ D_ready завершённых процессов, %
 }
 
 // ----------------------------------------------------------------------------------------
@@ -76,6 +110,12 @@ func (s *Stats) OnComplete(p *process.PSW) {
 	s.SumExec += p.ExecTicks
 	s.SumIO += p.IOTicks
 	s.SumTurnaround += s.Now - p.LoadedAt
+
+	// Параметры сравнения режимов (лабораторная работа 7).
+	s.SumMono += MonoTicks(p)
+	s.SumMulti += MultiTicks(p)
+	s.SumDExe += ExecutionIncrease(p)
+	s.SumDReady += ReadyShare(p)
 }
 
 // ----------------------------------------------------------------------------------------
@@ -86,6 +126,30 @@ func (s *Stats) OnDispatch(id int) {
 	s.ExecHistory = append(s.ExecHistory, id)
 	if len(s.ExecHistory) > HistoryLimit {
 		s.ExecHistory = s.ExecHistory[len(s.ExecHistory)-HistoryLimit:]
+	}
+}
+
+// ----------------------------------------------------------------------------------------
+// OnSystemAction учитывает время системного действия. Вызывается
+// регулировщиком один раз на каждое действие; время готовых процессов
+// увеличивает отдельная подпрограмма IncreaseReadyTime.
+func (s *Stats) OnSystemAction(action SystemAction, ticks int) {
+	if ticks <= 0 {
+		return
+	}
+
+	s.SystemTicks += ticks
+	switch action {
+	case SystemLoad:
+		s.SystemLoadTicks += ticks
+	case SystemDispatch:
+		s.SystemDispatchTicks += ticks
+	case SystemIOInit:
+		s.SystemIOInitTicks += ticks
+	case SystemIOComplete:
+		s.SystemIOCompleteTicks += ticks
+	case SystemTerminate:
+		s.SystemTerminateTicks += ticks
 	}
 }
 
@@ -178,12 +242,67 @@ func (s *Stats) AvgIO() float64 { return average(s.SumIO, s.CompletedCount) }
 func (s *Stats) AvgTurnaround() float64 { return average(s.SumTurnaround, s.CompletedCount) }
 
 // ----------------------------------------------------------------------------------------
+// Показатели сравнения однопрограммного и мультипрограммного режимов
+// (лабораторная работа 7).
+
+// EffectiveTime — время работы модели с учётом системных затрат:
+// модельные такты плюс виртуальные такты системных действий.
+func (s *Stats) EffectiveTime() int { return s.Now + s.SystemTicks }
+
+// MonoAvg — среднее время выполнения задания в однопрограммной ОС, тактов.
+func (s *Stats) MonoAvg() float64 { return average(s.SumMono, s.CompletedCount) }
+
+// MultiAvg — среднее время нахождения завершённого процесса в системе, тактов.
+func (s *Stats) MultiAvg() float64 { return average(s.SumMulti, s.CompletedCount) }
+
+// MonoPossible — сколько заданий могло бы выполниться за EffectiveTime
+// в однопрограммной ОС.
+func (s *Stats) MonoPossible() float64 {
+	avg := s.MonoAvg()
+	if avg <= 0 {
+		return 0
+	}
+	return float64(s.EffectiveTime()) / avg
+}
+
+// Performance — производительность модели ОС по сравнению с однопрограммной, %.
+// M_multi / M_mono * 100 = ΣT_mono / T_эфф * 100.
+func (s *Stats) Performance() float64 {
+	possible := s.MonoPossible()
+	if possible <= 0 {
+		return 0
+	}
+	return float64(s.CompletedCount) / possible * 100
+}
+
+// SystemShare — доля системных затрат в эффективном времени работы модели, %.
+func (s *Stats) SystemShare() float64 {
+	return percent(s.SystemTicks, s.EffectiveTime())
+}
+
+// AvgDExe — среднее увеличение времени выполнения по сравнению
+// с однопрограммной ОС, %.
+func (s *Stats) AvgDExe() float64 { return averageFloat(s.SumDExe, s.CompletedCount) }
+
+// AvgDReady — средняя доля ожидания в времени нахождения процесса
+// в системе, %.
+func (s *Stats) AvgDReady() float64 { return averageFloat(s.SumDReady, s.CompletedCount) }
+
+// ----------------------------------------------------------------------------------------
 // average возвращает sum/count (0 при отсутствии данных).
 func average(sum, count int) float64 {
 	if count == 0 {
 		return 0
 	}
 	return float64(sum) / float64(count)
+}
+
+// averageFloat возвращает sum/count для вещественной суммы (0 при count = 0).
+func averageFloat(sum float64, count int) float64 {
+	if count == 0 {
+		return 0
+	}
+	return sum / float64(count)
 }
 
 // ----------------------------------------------------------------------------------------

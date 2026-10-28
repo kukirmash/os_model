@@ -44,6 +44,9 @@ type Regulator struct {
 	// процессов (лабораторная работа 6). Может быть nil.
 	Stats *stats.Stats
 
+	// Costs — длительности системных действий (лабораторная работа 7).
+	Costs Costs
+
 	Table     []*process.PSW // таблица слов состояний процессов (резидентные процессы)
 	Completed int            // число выполненных (завершённых) заданий
 }
@@ -59,6 +62,10 @@ func (r *Regulator) Process(p *process.PSW, event Event) bool {
 		if !r.FreeSlot() {
 			return false
 		}
+		// Системные затраты на загрузку начисляются уже готовым процессам;
+		// новый процесс в таблицу ещё не добавлен и это время не получает.
+		r.charge(stats.SystemLoad, r.Costs.Load)
+		p.LoadTicks += r.Costs.Load
 		p.State = process.StateReady
 		r.Table = append(r.Table, p)
 		r.Planner.Add(p)
@@ -73,6 +80,11 @@ func (r *Regulator) Process(p *process.PSW, event Event) bool {
 		}
 		p.State = process.StateActive
 		r.Planner.Remove(p)
+		// Время выбора на ЦПр получают остальные готовые процессы;
+		// выбранный процесс уже переведён в «Активен».
+		r.charge(stats.SystemDispatch, r.Costs.Dispatch)
+		p.SwitchTicks += r.Costs.Dispatch
+		p.DispatchCount++
 
 	case EventIORequest:
 		// Задание инициализирует операцию ввода-вывода: слово состояния
@@ -81,6 +93,9 @@ func (r *Regulator) Process(p *process.PSW, event Event) bool {
 			return false
 		}
 		p.State = process.StateInitIO
+		r.charge(stats.SystemIOInit, r.Costs.IOInit)
+		p.IOInitTicks += r.Costs.IOInit
+		p.IORequestCount++
 
 	case EventIOStart:
 		// Процессор ВВ приступил к выполнению операции.
@@ -95,6 +110,11 @@ func (r *Regulator) Process(p *process.PSW, event Event) bool {
 		if p.State != process.StateBlockedIO {
 			return false
 		}
+		// Прерывание обслуживается, пока процесс ещё «Блокирован»,
+		// поэтому собственное время ожидания он не получает.
+		r.charge(stats.SystemIOComplete, r.Costs.IOInterrupt)
+		p.IOIntrTicks += r.Costs.IOInterrupt
+		p.IOCompleteCount++
 		p.State = process.StateReady
 		r.Planner.Add(p)
 
@@ -103,6 +123,8 @@ func (r *Regulator) Process(p *process.PSW, event Event) bool {
 		if p.State != process.StateActive {
 			return false
 		}
+		r.charge(stats.SystemTerminate, r.Costs.Terminate)
+		p.TermTicks += r.Costs.Terminate
 		r.Planner.Remove(p)
 		r.Memory.Free(*p.Task)
 		r.removeFromTable(p)
@@ -117,6 +139,38 @@ func (r *Regulator) Process(p *process.PSW, event Event) bool {
 	}
 
 	return true
+}
+
+// ----------------------------------------------------------------------------------------
+// IncreaseReadyTime — подпрограмма «Увеличить время готовых процессов»
+// (лабораторная работа 7). Увеличивает на ticks время пребывания в системе
+// всех процессов, находящихся в состоянии «Готов». Именно они ожидают,
+// пока ОС выполняет системное действие.
+//
+// Состояния «Активен», «Инициализация IO» и «Блокирован» не изменяются:
+// активный процесс в это время не ожидает, а процесс, блокированный
+// по вводу-выводу, по правилу лабораторной работы системное время
+// не получает.
+func (r *Regulator) IncreaseReadyTime(ticks int) {
+	if ticks <= 0 {
+		return
+	}
+	for _, p := range r.Table {
+		if p.State == process.StateReady {
+			p.SystemWaitTicks += ticks
+		}
+	}
+}
+
+// ----------------------------------------------------------------------------------------
+// charge начисляет время системного действия: увеличивает ожидание готовых
+// процессов и суммарные системные затраты. Собственные затраты процесса
+// (LoadTicks, SwitchTicks и т. д.) начисляет вызвавшая подпрограмма.
+func (r *Regulator) charge(action stats.SystemAction, ticks int) {
+	r.IncreaseReadyTime(ticks)
+	if r.Stats != nil {
+		r.Stats.OnSystemAction(action, ticks)
+	}
 }
 
 // ----------------------------------------------------------------------------------------

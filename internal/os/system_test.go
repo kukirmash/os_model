@@ -1,6 +1,7 @@
 package os
 
 import (
+	"math"
 	"testing"
 
 	"os_model/internal/process"
@@ -23,7 +24,7 @@ func TestTickInvariants(t *testing.T) {
 
 	for tick := 0; tick < 3000; tick++ {
 		sys.DoOneTick()
-		sys.Snapshot() // индикация не должна паниковать
+		sys.ViewSnapshot() // индикация не должна паниковать
 
 		// Процессы, обслуживаемые процессорами ВВ.
 		opProcs := make(map[int]bool, len(sys.IO.Operations))
@@ -120,6 +121,32 @@ func TestTickInvariants(t *testing.T) {
 			t.Fatalf("такт %d: время на ЦПр по процессам %d != занятость ЦПр %d",
 				tick, execSum, sys.Stats.CPUBusy)
 		}
+
+		// Инварианты лабораторной работы 7: разложение времён и
+		// системные затраты.
+		systemSum := sys.Stats.SystemLoadTicks + sys.Stats.SystemDispatchTicks +
+			sys.Stats.SystemIOInitTicks + sys.Stats.SystemIOCompleteTicks +
+			sys.Stats.SystemTerminateTicks
+		if systemSum != sys.Stats.SystemTicks {
+			t.Fatalf("такт %d: разбивка системных затрат %d != сумма %d",
+				tick, systemSum, sys.Stats.SystemTicks)
+		}
+		effective := sys.Stats.EffectiveTime()
+		for _, p := range sys.Regulator.Table {
+			mono := stats.MonoTicks(p)
+			multi := stats.MultiTicks(p)
+			if mono > multi {
+				t.Fatalf("такт %d: T_mono %d > T_multi %d у процесса #%d",
+					tick, mono, multi, p.ID)
+			}
+			if multi > effective {
+				t.Fatalf("такт %d: T_multi %d > T_эфф %d у процесса #%d",
+					tick, multi, effective, p.ID)
+			}
+			if got := stats.ExecutionIncrease(p); got < 100 {
+				t.Fatalf("такт %d: D_exe %.2f%% < 100%% у процесса #%d", tick, got, p.ID)
+			}
+		}
 	}
 
 	if sys.Regulator.Completed == 0 {
@@ -150,15 +177,44 @@ func TestTickInvariants(t *testing.T) {
 		t.Error("среднее оборотное время должно быть положительным")
 	}
 
+	// Показатели сравнения режимов (лабораторная работа 7).
+	if sys.Stats.SystemTicks <= 0 {
+		t.Error("системные затраты должны быть положительными")
+	}
+	if sys.Stats.SumMono <= 0 || sys.Stats.SumMulti <= 0 {
+		t.Error("суммы T_mono и T_multi должны быть положительными")
+	}
+	if sys.Stats.AvgDExe() < 100 {
+		t.Errorf("среднее D_exe %.2f%% меньше 100%%", sys.Stats.AvgDExe())
+	}
+	if got, want := sys.Stats.Performance(), 100*float64(sys.Stats.SumMono)/float64(sys.Stats.EffectiveTime()); math.Abs(got-want) > 1e-9 {
+		t.Errorf("D_multi = %.4f, по формуле ΣT_mono/T_эфф = %.4f", got, want)
+	}
+	if sys.Stats.MonoPossible() <= 0 {
+		t.Error("M_mono должно быть положительным")
+	}
+
 	// Снимок состояния содержит статистику и параметры нового задания.
-	snap := sys.Snapshot()
-	if snap.Stats.CompletedCount != sys.Regulator.Completed {
+	view := sys.ViewSnapshot()
+	if view.Stats.CompletedCount != sys.Regulator.Completed {
 		t.Error("снимок: счётчик завершённых процессов статистики не совпадает")
 	}
-	if len(snap.Stats.ExecHistory) != len(sys.Stats.ExecHistory) {
+	if len(view.Stats.ExecHistory) != len(sys.Stats.ExecHistory) {
 		t.Error("снимок: последовательность выполнения процессов не совпадает")
 	}
-	if !snap.LastTask.Loaded {
+	if !view.LastTask.Loaded {
 		t.Error("снимок: последнее задание должно быть загружено")
+	}
+	if view.Stats.TEffective != sys.Stats.EffectiveTime() {
+		t.Error("снимок: T_эфф не совпадает")
+	}
+	if view.Stats.Performance != sys.Stats.Performance() {
+		t.Error("снимок: D_multi не совпадает")
+	}
+	if len(view.Processes) > 0 {
+		p := view.Processes[0]
+		if p.TMono <= 0 || p.TMulti < p.TMono {
+			t.Errorf("снимок: неверные T_mono/T_multi процесса #%d: %d/%d", p.ID, p.TMono, p.TMulti)
+		}
 	}
 }

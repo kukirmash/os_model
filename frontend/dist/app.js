@@ -5,66 +5,66 @@
 //   os:update    — снимок состояния из ядра (Go → JS);
 //   os:directive — управляющие директивы оператора (JS → Go).
 //
-// Разделы индикации соответствуют лабораторной работе 6: параметры системы,
-// параметры нового задания, параметры центрального процессора, параметры
-// процессов, последовательность выполнения процессов и средние значения.
+// Все имена, относящиеся к отображению, имеют префикс UI_ (константы)
+// или ui (функции и переменные), чтобы не путать данные интерфейса
+// с полями ядра модели.
 // ============================================================================
 
 "use strict";
 
-const STATE_NAMES = ["Отсутствует", "Готов", "Активен", "Инициализация IO", "Блокирован"];
-const STATE_CLASSES = ["st-none", "st-ready", "st-active", "st-io-init", "st-blocked"];
-const CPU_NAMES = ["Ожидание", "Работа"];
-const OP_NAMES = ["+", "−", "×", "÷"];
-const INTERRUPT_NAMES = ["окончание ВВ", "таймер"];
+const UI_STATE_NAMES = ["Отсутствует", "Готов", "Активен", "Инициализация IO", "Блокирован"];
+const UI_STATE_CLASSES = ["st-none", "st-ready", "st-active", "st-io-init", "st-blocked"];
+const UI_CPU_NAMES = ["Ожидание", "Работа"];
+const UI_OP_NAMES = ["+", "−", "×", "÷"];
+const UI_INTERRUPT_NAMES = ["окончание ВВ", "таймер"];
 
-const $ = (id) => document.getElementById(id);
+const uiById = (id) => document.getElementById(id);
 
-let paused = false;
-let finished = false;
+let uiPaused = false;
+let uiFinished = false;
 
 // ----------------------------------------------------------------------------
 // Отправка директив в ядро
 // ----------------------------------------------------------------------------
 
-function send(name) {
+function uiSendDirective(name) {
   if (window.runtime) {
     window.runtime.EventsEmit("os:directive", name);
   }
 }
 
-$("btn-pause").addEventListener("click", () => send(paused ? "resume" : "pause"));
-$("btn-slower").addEventListener("click", () => send("speed-down"));
-$("btn-faster").addEventListener("click", () => send("speed-up"));
-$("btn-quit").addEventListener("click", () => {
-  if (!finished && confirm("Завершить моделирование?")) {
-    send("quit");
+uiById("btn-pause").addEventListener("click", () => uiSendDirective(uiPaused ? "resume" : "pause"));
+uiById("btn-slower").addEventListener("click", () => uiSendDirective("speed-down"));
+uiById("btn-faster").addEventListener("click", () => uiSendDirective("speed-up"));
+uiById("btn-quit").addEventListener("click", () => {
+  if (!uiFinished && confirm("Завершить моделирование?")) {
+    uiSendDirective("quit");
   }
 });
 
 window.addEventListener("keydown", (event) => {
-  if (finished || event.repeat) {
+  if (uiFinished || event.repeat) {
     return;
   }
 
   if (event.code === "Space") {
     event.preventDefault();
-    send(paused ? "resume" : "pause");
+    uiSendDirective(uiPaused ? "resume" : "pause");
     return;
   }
 
   if (event.key === "+" || event.key === "=") {
-    send("speed-up");
+    uiSendDirective("speed-up");
     return;
   }
 
   if (event.key === "-" || event.key === "_") {
-    send("speed-down");
+    uiSendDirective("speed-down");
     return;
   }
 
   if ("qQйЙ".includes(event.key) && confirm("Завершить моделирование?")) {
-    send("quit");
+    uiSendDirective("quit");
   }
 });
 
@@ -72,41 +72,41 @@ window.addEventListener("keydown", (event) => {
 // Вспомогательные функции отображения
 // ----------------------------------------------------------------------------
 
-function setText(id, value) {
-  const el = $(id);
+function uiSetText(id, value) {
+  const el = uiById(id);
   if (el) {
     el.textContent = value;
   }
 }
 
-// fmtInt — целое число в русской локали; fmt1 — число с одним знаком после запятой.
-function fmtInt(value) {
+// uiFormatInt — целое число в русской локали; uiFormat1 — с одним знаком.
+function uiFormatInt(value) {
   return Number(value ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 0 });
 }
 
-function fmt1(value) {
+function uiFormat1(value) {
   return Number(value ?? 0).toLocaleString("ru-RU", {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   });
 }
 
-function stateMark(state) {
-  const name = STATE_NAMES[state] ?? "?";
-  const cls = STATE_CLASSES[state] ?? "st-none";
+function uiStateMark(state) {
+  const name = UI_STATE_NAMES[state] ?? "?";
+  const cls = UI_STATE_CLASSES[state] ?? "st-none";
   return `<span class="state ${cls}">${name}</span>`;
 }
 
-function commandText(snapshot) {
-  if (!snapshot.activeId) {
+function uiCommandText(view) {
+  if (!view.activeId) {
     return "—";
   }
 
-  switch (snapshot.commandType) {
+  switch (view.commandType) {
     case 0:
-      return `вычислительная: ${OP_NAMES[snapshot.commandCode] ?? "?"} (A1=${snapshot.commandAddr1}, A2=${snapshot.commandAddr2})`;
+      return `вычислительная: ${UI_OP_NAMES[view.commandCode] ?? "?"} (A1=${view.commandAddr1}, A2=${view.commandAddr2})`;
     case 1:
-      return `ввод-вывод: ${snapshot.commandDuration} такт.`;
+      return `ввод-вывод: ${view.commandDuration} такт.`;
     case 2:
       return "завершение задания";
     default:
@@ -114,32 +114,32 @@ function commandText(snapshot) {
   }
 }
 
-// renderRows отрисовывает таблицу или заглушку «нет данных», чтобы панель
+// uiRenderRows отрисовывает таблицу или заглушку «нет данных», чтобы панель
 // не «дёргалась» при изменении числа строк.
-function renderRows(tableId, rows, emptyId, rowBuilder) {
-  const tbody = $(tableId).querySelector("tbody");
+function uiRenderRows(tableId, rows, emptyId, rowBuilder) {
+  const tbody = uiById(tableId).querySelector("tbody");
   tbody.innerHTML = rows.map(rowBuilder).join("");
 
-  $(tableId).parentElement.style.display = rows.length ? "" : "none";
-  $(emptyId).style.display = rows.length ? "none" : "flex";
+  uiById(tableId).parentElement.style.display = rows.length ? "" : "none";
+  uiById(emptyId).style.display = rows.length ? "none" : "flex";
 }
 
 // ----------------------------------------------------------------------------
 // Разделы индикации
 // ----------------------------------------------------------------------------
 
-function renderHeader(snapshot) {
-  paused = snapshot.paused;
-  finished = snapshot.quit;
+function uiRenderHeader(view) {
+  uiPaused = view.paused;
+  uiFinished = view.quit;
 
-  setText("m-time", fmtInt(snapshot.time));
-  setText("m-speed", fmt1(snapshot.speed));
+  uiSetText("m-time", uiFormatInt(view.time));
+  uiSetText("m-speed", uiFormat1(view.speed));
 
-  const status = $("m-status");
-  if (snapshot.quit) {
+  const status = uiById("m-status");
+  if (view.quit) {
     status.textContent = "Завершено";
     status.className = "state st-none";
-  } else if (snapshot.paused) {
+  } else if (view.paused) {
     status.textContent = "Пауза";
     status.className = "state st-blocked";
   } else {
@@ -147,63 +147,63 @@ function renderHeader(snapshot) {
     status.className = "state st-active";
   }
 
-  $("btn-pause").textContent = snapshot.paused ? "Продолжить" : "Пауза";
-  $("btn-pause").disabled = snapshot.quit;
-  $("btn-slower").disabled = snapshot.quit;
-  $("btn-faster").disabled = snapshot.quit;
-  $("btn-quit").disabled = snapshot.quit;
+  uiById("btn-pause").textContent = view.paused ? "Продолжить" : "Пауза";
+  uiById("btn-pause").disabled = view.quit;
+  uiById("btn-slower").disabled = view.quit;
+  uiById("btn-faster").disabled = view.quit;
+  uiById("btn-quit").disabled = view.quit;
 }
 
-function renderSystem(snapshot) {
-  const stats = snapshot.stats ?? {};
-  const free = snapshot.memoryTotal - snapshot.memoryUsed;
-  const percent = snapshot.memoryTotal
-    ? Math.round((snapshot.memoryUsed / snapshot.memoryTotal) * 100)
+function uiRenderSystem(view) {
+  const stats = view.stats ?? {};
+  const free = view.memoryTotal - view.memoryUsed;
+  const percent = view.memoryTotal
+    ? Math.round((view.memoryUsed / view.memoryTotal) * 100)
     : 0;
 
-  setText("sys-generated", fmtInt(snapshot.generated));
-  setText("sys-completed", fmtInt(snapshot.completed));
-  setText("sys-table", `${snapshot.processes.length} / ${snapshot.maxProcesses}`);
-  setText("sys-int", fmtInt(snapshot.interruptsHandled));
-  setText(
+  uiSetText("sys-generated", uiFormatInt(view.generated));
+  uiSetText("sys-completed", uiFormatInt(view.completed));
+  uiSetText("sys-table", `${view.processes.length} / ${view.maxProcesses}`);
+  uiSetText("sys-int", uiFormatInt(view.interruptsHandled));
+  uiSetText(
     "sys-ready",
-    `${fmtInt(stats.readyLen)} / ${fmt1(stats.readyAvg)} / ${fmtInt(stats.readyMax)}`
+    `${uiFormatInt(stats.readyLen)} / ${uiFormat1(stats.readyAvg)} / ${uiFormatInt(stats.readyMax)}`
   );
-  setText(
+  uiSetText(
     "sys-io",
-    `${fmtInt(stats.ioBusy)} / ${fmt1(stats.ioBusyAvg)} / ${fmtInt(stats.ioBusyMax)}`
+    `${uiFormatInt(stats.ioBusy)} / ${uiFormat1(stats.ioBusyAvg)} / ${uiFormatInt(stats.ioBusyMax)}`
   );
-  setText("sys-throughput", fmt1(stats.throughput));
+  uiSetText("sys-throughput", uiFormat1(stats.throughput));
 
-  $("mem-bar").style.width = percent + "%";
-  setText("mem-percent", percent + " %");
-  setText("mem-used", fmtInt(snapshot.memoryUsed));
-  setText("mem-free", fmtInt(free));
-  setText("mem-total", fmtInt(snapshot.memoryTotal));
+  uiById("mem-bar").style.width = percent + "%";
+  uiSetText("mem-percent", percent + " %");
+  uiSetText("mem-used", uiFormatInt(view.memoryUsed));
+  uiSetText("mem-free", uiFormatInt(free));
+  uiSetText("mem-total", uiFormatInt(view.memoryTotal));
 }
 
-function renderCPU(snapshot) {
-  const stats = snapshot.stats ?? {};
+function uiRenderCPU(view) {
+  const stats = view.stats ?? {};
 
-  const cpuState = $("cpu-state");
-  cpuState.textContent = CPU_NAMES[snapshot.cpuState] ?? "—";
-  cpuState.className = "state " + (snapshot.cpuState === 1 ? "st-active" : "st-none");
+  const cpuState = uiById("cpu-state");
+  cpuState.textContent = UI_CPU_NAMES[view.cpuState] ?? "—";
+  cpuState.className = "state " + (view.cpuState === 1 ? "st-active" : "st-none");
 
-  setText("cpu-active", snapshot.activeId ? `#${snapshot.activeId}` : "—");
-  setText("cpu-command", commandText(snapshot));
-  setText("cpu-busy", `${fmtInt(stats.cpuBusy)} / ${fmtInt(stats.cpuIdle)}`);
-  setText("cpu-load", fmt1(stats.cpuUtilization) + " %");
+  uiSetText("cpu-active", view.activeId ? `#${view.activeId}` : "—");
+  uiSetText("cpu-command", uiCommandText(view));
+  uiSetText("cpu-busy", `${uiFormatInt(stats.cpuBusy)} / ${uiFormatInt(stats.cpuIdle)}`);
+  uiSetText("cpu-load", uiFormat1(stats.cpuUtilization) + " %");
 
   const load = Math.max(0, Math.min(100, stats.cpuUtilization ?? 0));
-  $("cpu-load-bar").style.width = load + "%";
+  uiById("cpu-load-bar").style.width = load + "%";
 }
 
-function renderTask(snapshot) {
-  const task = snapshot.lastTask ?? {};
+function uiRenderTask(view) {
+  const task = view.lastTask ?? {};
   // Задание может быть ещё не загружено (нет места в таблице PSW или
   // памяти) — тогда выводится заявка без номера и со статусом ошибки.
   const hasTask = task.size > 0 || task.totalCommands > 0;
-  const status = $("task-status");
+  const status = uiById("task-status");
 
   if (!hasTask) {
     status.textContent = "—";
@@ -219,7 +219,7 @@ function renderTask(snapshot) {
     status.title = task.reason ?? "";
   }
 
-  const reason = $("task-reason");
+  const reason = uiById("task-reason");
   if (hasTask && !task.loaded && task.reason) {
     reason.textContent = "Причина: " + task.reason;
     reason.hidden = false;
@@ -228,38 +228,72 @@ function renderTask(snapshot) {
     reason.hidden = true;
   }
 
-  setText("task-id", task.id ? `#${task.id}` : "заявка");
-  setText("task-size", hasTask ? fmtInt(task.size) : "—");
-  setText("task-commands", hasTask ? fmtInt(task.totalCommands) : "—");
-  setText("task-io", hasTask ? task.ioPercent + " %" : "—");
-  setText("task-priority", hasTask ? fmtInt(task.basePriority) : "—");
+  uiSetText("task-id", task.id ? `#${task.id}` : "заявка");
+  uiSetText("task-size", hasTask ? uiFormatInt(task.size) : "—");
+  uiSetText("task-commands", hasTask ? uiFormatInt(task.totalCommands) : "—");
+  uiSetText("task-io", hasTask ? task.ioPercent + " %" : "—");
+  uiSetText("task-priority", hasTask ? uiFormatInt(task.basePriority) : "—");
 
-  const tp = snapshot.taskParams ?? {};
-  setText(
+  const tp = view.taskParams ?? {};
+  uiSetText(
     "task-ranges",
     `Диапазоны генерации: размер ${tp.sizeMin}–${tp.sizeMax} ед. · команд ${tp.commandsMin}–${tp.commandsMax} · ВВ ${tp.ioPercentMin}–${tp.ioPercentMax} % · приоритет ${tp.priorityMin}–${tp.priorityMax}`
   );
 }
 
-function renderAverages(snapshot) {
-  const stats = snapshot.stats ?? {};
+function uiRenderAverages(view) {
+  const stats = view.stats ?? {};
 
-  setText("avg-loaded-count", fmtInt(stats.loadedCount) + " загружено");
-  setText("avg-size", fmt1(stats.avgSize));
-  setText("avg-commands", fmt1(stats.avgCommands));
-  setText("avg-io-percent", fmt1(stats.avgIoPercent) + " %");
-  setText("avg-priority", fmt1(stats.avgPriority));
+  uiSetText("avg-loaded-count", uiFormatInt(stats.loadedCount) + " загружено");
+  uiSetText("avg-size", uiFormat1(stats.avgSize));
+  uiSetText("avg-commands", uiFormat1(stats.avgCommands));
+  uiSetText("avg-io-percent", uiFormat1(stats.avgIoPercent) + " %");
+  uiSetText("avg-priority", uiFormat1(stats.avgPriority));
 
-  setText("avg-completed-count", fmtInt(stats.completedCount) + " завершено");
-  setText("avg-wait", fmt1(stats.avgWait));
-  setText("avg-exec", fmt1(stats.avgExec));
-  setText("avg-io", fmt1(stats.avgIo));
-  setText("avg-turnaround", fmt1(stats.avgTurnaround));
+  uiSetText("avg-completed-count", uiFormatInt(stats.completedCount) + " завершено");
+  uiSetText("avg-wait", uiFormat1(stats.avgWait));
+  uiSetText("avg-exec", uiFormat1(stats.avgExec));
+  uiSetText("avg-io", uiFormat1(stats.avgIo));
+  uiSetText("avg-turnaround", uiFormat1(stats.avgTurnaround));
 }
 
-function renderHistory(snapshot) {
-  const history = (snapshot.stats ?? {}).execHistory ?? [];
-  const box = $("exec-history");
+function uiRenderComparison(view) {
+  const stats = view.stats ?? {};
+
+  uiSetText(
+    "cmp-mono",
+    `${uiFormatInt(stats.sumMono)} / ${uiFormat1(stats.avgMono)}`
+  );
+  uiSetText("cmp-multi", uiFormat1(stats.avgMulti));
+  uiSetText(
+    "cmp-time",
+    `${uiFormatInt(stats.tModel)} / ${uiFormatInt(stats.tSystem)} / ${uiFormatInt(stats.tEffective)}`
+  );
+  uiSetText(
+    "cmp-tasks",
+    `${uiFormat1(stats.mMono)} / ${uiFormatInt(stats.mMulti)}`
+  );
+  uiSetText("cmp-performance", uiFormat1(stats.performance) + " %");
+  uiSetText("cmp-system-share", uiFormat1(stats.systemShare) + " %");
+  uiSetText("cmp-avg-dexe", uiFormat1(stats.avgDExe) + " %");
+  uiSetText("cmp-avg-dready", uiFormat1(stats.avgDReady) + " %");
+}
+
+function uiRenderCosts(view) {
+  const costs = view.costs ?? {};
+  const stats = view.stats ?? {};
+
+  uiSetText("cost-load", `${uiFormatInt(costs.load)} такт.`);
+  uiSetText("cost-dispatch", `${uiFormatInt(costs.dispatch)} такт.`);
+  uiSetText("cost-io-init", `${uiFormatInt(costs.ioInit)} такт.`);
+  uiSetText("cost-io-int", `${uiFormatInt(costs.ioInterrupt)} такт.`);
+  uiSetText("cost-term", `${uiFormatInt(costs.terminate)} такт.`);
+  uiSetText("cost-total", `${uiFormatInt(stats.tSystem)} такт.`);
+}
+
+function uiRenderHistory(view) {
+  const history = (view.stats ?? {}).execHistory ?? [];
+  const box = uiById("exec-history");
 
   if (!history.length) {
     box.innerHTML = `<span class="empty-steps">процессы на ЦПр ещё не выбирались</span>`;
@@ -273,28 +307,28 @@ function renderHistory(snapshot) {
       .join("");
   }
 
-  setText("history-count", `${history.length} / 16`);
+  uiSetText("history-count", `${history.length} / 16`);
 }
 
-function renderReady(snapshot) {
-  const rows = snapshot.ready ?? [];
-  setText("ready-count", fmtInt(rows.length));
+function uiRenderReady(view) {
+  const rows = view.ready ?? [];
+  uiSetText("ready-count", uiFormatInt(rows.length));
 
-  renderRows("ready-table", rows, "ready-empty", (p) => `
+  uiRenderRows("ready-table", rows, "ready-empty", (p) => `
     <tr>
       <td class="mono">#${p.id}</td>
-      <td>${stateMark(p.state)}</td>
+      <td>${uiStateMark(p.state)}</td>
       <td class="mono">${p.pc}</td>
       <td class="mono">${p.size}</td>
       <td class="mono">${p.dynamicPriority}</td>
     </tr>`);
 }
 
-function renderIO(snapshot) {
-  const rows = snapshot.operations ?? [];
-  setText("io-count", fmtInt(rows.length));
+function uiRenderIO(view) {
+  const rows = view.operations ?? [];
+  uiSetText("io-count", uiFormatInt(rows.length));
 
-  renderRows("io-table", rows, "io-empty", (op) => {
+  uiRenderRows("io-table", rows, "io-empty", (op) => {
     const done = op.totalTicks > 0
       ? Math.round(((op.totalTicks - op.ticksLeft) / op.totalTicks) * 100)
       : 0;
@@ -302,34 +336,34 @@ function renderIO(snapshot) {
     <tr>
       <td class="mono">#${op.processorId}</td>
       <td class="mono">#${op.processId}</td>
-      <td>${stateMark(op.state)}</td>
+      <td>${uiStateMark(op.state)}</td>
       <td class="mono">${op.ticksLeft} / ${op.totalTicks}</td>
       <td class="mono">${done} %</td>
     </tr>`;
   });
 }
 
-function renderInterrupts(snapshot) {
-  const rows = [...(snapshot.interruptLog ?? [])].reverse();
-  setText("int-count", fmtInt(snapshot.interruptsHandled));
+function uiRenderInterrupts(view) {
+  const rows = [...(view.interruptLog ?? [])].reverse();
+  uiSetText("int-count", uiFormatInt(view.interruptsHandled));
 
-  renderRows("int-table", rows, "int-empty", (s) => `
+  uiRenderRows("int-table", rows, "int-empty", (s) => `
     <tr>
       <td class="mono">${s.time}</td>
-      <td>${INTERRUPT_NAMES[s.type] ?? "?"}</td>
+      <td>${UI_INTERRUPT_NAMES[s.type] ?? "?"}</td>
       <td class="mono">ВВ #${s.sourceId}</td>
       <td class="mono">#${s.processId}</td>
     </tr>`);
 }
 
-function renderProcesses(snapshot) {
-  const rows = snapshot.processes ?? [];
-  setText("proc-count", `${rows.length} / ${snapshot.maxProcesses}`);
+function uiRenderProcesses(view) {
+  const rows = view.processes ?? [];
+  uiSetText("proc-count", `${rows.length} / ${view.maxProcesses}`);
 
-  renderRows("proc-table", rows, "proc-empty", (p) => `
+  uiRenderRows("proc-table", rows, "proc-empty", (p) => `
     <tr class="${p.state === 2 ? "row-active" : ""}">
       <td class="mono">#${p.id}</td>
-      <td>${stateMark(p.state)}</td>
+      <td>${uiStateMark(p.state)}</td>
       <td class="mono">${p.pc}</td>
       <td class="mono">${p.totalCommands}</td>
       <td class="mono">${p.size}</td>
@@ -342,21 +376,43 @@ function renderProcesses(snapshot) {
     </tr>`);
 }
 
+function uiRenderProcessComparison(view) {
+  const rows = view.processes ?? [];
+  uiSetText("cmp-proc-count", `${rows.length} / ${view.maxProcesses}`);
+
+  uiRenderRows("cmp-proc-table", rows, "cmp-proc-empty", (p) => `
+    <tr class="${p.state === 2 ? "row-active" : ""}">
+      <td class="mono">#${p.id}</td>
+      <td class="mono">${p.tMono}</td>
+      <td class="mono">${p.tMulti}</td>
+      <td class="mono">${uiFormat1(p.dExe)}</td>
+      <td class="mono">${p.tReady}</td>
+      <td class="mono">${uiFormat1(p.dReady)}</td>
+      <td class="mono">${p.switchTicks}</td>
+      <td class="mono">${p.ioInitTicks}</td>
+      <td class="mono">${p.ioIntrTicks}</td>
+      <td class="mono">${p.systemWaitTicks}</td>
+    </tr>`);
+}
+
 // ----------------------------------------------------------------------------
 // Отрисовка снимка состояния
 // ----------------------------------------------------------------------------
 
-function render(snapshot) {
-  renderHeader(snapshot);
-  renderSystem(snapshot);
-  renderCPU(snapshot);
-  renderTask(snapshot);
-  renderAverages(snapshot);
-  renderHistory(snapshot);
-  renderReady(snapshot);
-  renderIO(snapshot);
-  renderInterrupts(snapshot);
-  renderProcesses(snapshot);
+function uiRenderView(view) {
+  uiRenderHeader(view);
+  uiRenderSystem(view);
+  uiRenderCPU(view);
+  uiRenderTask(view);
+  uiRenderAverages(view);
+  uiRenderComparison(view);
+  uiRenderCosts(view);
+  uiRenderHistory(view);
+  uiRenderReady(view);
+  uiRenderIO(view);
+  uiRenderInterrupts(view);
+  uiRenderProcesses(view);
+  uiRenderProcessComparison(view);
 }
 
 // ----------------------------------------------------------------------------
@@ -364,7 +420,7 @@ function render(snapshot) {
 // ----------------------------------------------------------------------------
 
 if (window.runtime) {
-  window.runtime.EventsOn("os:update", render);
+  window.runtime.EventsOn("os:update", uiRenderView);
 } else {
   console.warn("Wails runtime не найден — запустите приложение через wails dev / wails build");
 }

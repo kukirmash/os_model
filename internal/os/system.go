@@ -95,6 +95,11 @@ type System struct {
 	Paused     bool           // моделирование приостановлено
 	Quit       bool           // получена директива завершения
 
+	// AutoLoadEnabled разрешает автоматическую загрузку новых заданий,
+	// когда ЦПр простаивает. В тестах отключается для детерминированных
+	// прогонов фиксированного набора заданий.
+	AutoLoadEnabled bool
+
 	// OnTick вызывается каждый такт для индикации состояния модели
 	// (например, для отправки снимка в интерфейс). Может быть nil.
 	OnTick func(s *System)
@@ -117,6 +122,12 @@ func (sys *System) Init() {
 		sys.Config.IOMaxDuration = DefaultIOMaxDuration
 	}
 
+	// Длительности системных действий: явно заданные или по умолчанию.
+	costs := regulator.DefaultCosts()
+	if sys.Config.SystemCosts != nil {
+		costs = *sys.Config.SystemCosts
+	}
+
 	// Создание подсистем и их связывание.
 	sys.Stats = &stats.Stats{}
 	sys.Memory = &memory.Allocator{TotalSize: sys.Config.MemorySize}
@@ -125,6 +136,7 @@ func (sys *System) Init() {
 		Memory:       sys.Memory,
 		MaxProcesses: MaxProcesses,
 		Stats:        sys.Stats,
+		Costs:        costs,
 	}
 	sys.Interrupts = &interrupt.Supervisor{}
 	sys.IO = &io.Processors{
@@ -132,9 +144,10 @@ func (sys *System) Init() {
 		Interrupts: sys.Interrupts,
 	}
 	sys.CPU = &cpu.CPU{
-		IO:            sys.IO,
-		Processes:     sys.Regulator,
-		IOMaxDuration: sys.Config.IOMaxDuration,
+		IO:              sys.IO,
+		Processes:       sys.Regulator,
+		IOMaxDuration:   sys.Config.IOMaxDuration,
+		FixedIODuration: sys.Config.FixedIODuration,
 	}
 
 	if sys.Directives == nil {
@@ -145,6 +158,7 @@ func (sys *System) Init() {
 	sys.nextTaskID = 0
 	sys.Paused = false
 	sys.Quit = false
+	sys.AutoLoadEnabled = true
 	sys.setSpeed(1000.0 / float64(sys.Config.TickDurationMs))
 }
 
@@ -157,7 +171,14 @@ func (sys *System) Init() {
 func (sys *System) GenerateAndLoadTask() bool {
 	// Параметры нового задания (выводятся подпрограммой индикации
 	// «Вывод параметров нового задания»).
-	task := sys.generateTask()
+	return sys.LoadTask(sys.generateTask())
+}
+
+// ----------------------------------------------------------------------------------------
+// LoadTask загружает задание с явно заданными параметрами. Используется
+// генератором заданий и детерминированными тестами лабораторной работы 7.
+// Возвращает true, если задание загружено.
+func (sys *System) LoadTask(task process.Task) bool {
 	sys.LastTask = LastTaskInfo{Task: task}
 
 	// Проверка места в таблице слов состояний процессов.
@@ -214,7 +235,9 @@ func (sys *System) HandleDirectives() {
 func (sys *System) RunLoop() {
 	// Цикл загрузки заданий для начала моделирования: загружается столько
 	// заданий, сколько помещается в память и в таблицу процессов.
-	for sys.GenerateAndLoadTask() {
+	if sys.AutoLoadEnabled {
+		for sys.GenerateAndLoadTask() {
+		}
 	}
 
 	for !sys.Quit {
@@ -345,8 +368,8 @@ func (sys *System) CheckSystemState() {
 
 	// Готовых процессов нет: ЦПр «Ожидает», ОС может загрузить одно новое
 	// задание (место в таблице PSW и достаточная память проверяются
-	// в GenerateAndLoadTask).
-	if sys.GenerateAndLoadTask() {
+	// в GenerateAndLoadTask). В тестах автозагрузка может быть отключена.
+	if sys.AutoLoadEnabled && sys.GenerateAndLoadTask() {
 		sys.dispatchProcess()
 	}
 }

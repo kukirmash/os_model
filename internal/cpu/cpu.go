@@ -93,6 +93,10 @@ type CPU struct {
 	// IOMaxDuration — максимальная длительность операции ввода-вывода, тактов.
 	IOMaxDuration int
 
+	// FixedIODuration — фиксированная длительность операции ВВ (для
+	// детерминированных тестов). 0 означает случайную длительность.
+	FixedIODuration int
+
 	// OperandMemory — аппаратная память, в которой хранятся операнды
 	// (инициализируется лениво).
 	OperandMemory []int
@@ -259,6 +263,10 @@ func (cpu *CPU) ensureOperandMemory() {
 // newIODuration генерирует длительность операции ввода-вывода
 // в диапазоне 1..IOMaxDuration тактов.
 func (cpu *CPU) newIODuration() int {
+	if cpu.FixedIODuration > 0 {
+		return cpu.FixedIODuration
+	}
+
 	maxDuration := cpu.IOMaxDuration
 	if maxDuration < 1 {
 		maxDuration = 1

@@ -131,6 +131,29 @@
         </div>
       </section>
 
+      <!-- Сравнение параметров процессов в двух режимах -->
+      <section class="panel span-12">
+        <header class="panel-head">
+          <h2>Параметры процессов в однопрограммном и мультипрограммном режимах</h2>
+          <span class="badge mono" id="cmp-proc-count">0 / 16</span>
+        </header>
+        <div class="panel-body">
+          <div class="table-wrap">
+            <table class="table" id="cmp-proc-table">
+              <thead>
+                <tr>
+                  <th>№</th><th>T_mono</th><th>T_multi</th><th>D_exe, %</th>
+                  <th>T_ожид</th><th>D_ready, %</th><th>Переключения</th>
+                  <th>Иниц. ВВ</th><th>Прерывания ВВ</th><th>Сист. ожидание</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="empty" id="cmp-proc-empty">Нет загруженных процессов</div>
+        </div>
+      </section>
+
       <!-- Вывод средних значений параметров процессов -->
       <section class="panel span-5">
         <header class="panel-head">
@@ -155,6 +178,51 @@
               <div><dt>Оборотное время, тактов</dt><dd class="mono" id="avg-turnaround">0</dd></div>
             </dl>
           </div>
+        </div>
+      </section>
+
+      <!-- Сравнение с однопрограммной ОС -->
+      <section class="panel span-7">
+        <header class="panel-head">
+          <h2>Сравнение с однопрограммной ОС</h2>
+        </header>
+        <div class="panel-body">
+          <dl class="kv two-col">
+            <div><dt>T_mono, сумма / среднее</dt><dd class="mono" id="cmp-mono">0 / 0</dd></div>
+            <div><dt>T_multi, среднее</dt><dd class="mono" id="cmp-multi">0</dd></div>
+            <div><dt>T_мод / T_сист / T_эфф</dt><dd class="mono" id="cmp-time">0 / 0 / 0</dd></div>
+            <div><dt>M_mono / M_multi</dt><dd class="mono" id="cmp-tasks">0 / 0</dd></div>
+            <div><dt>Производительность D_multi</dt><dd class="mono" id="cmp-performance">0 %</dd></div>
+            <div><dt>Доля системных затрат D_sys</dt><dd class="mono" id="cmp-system-share">0 %</dd></div>
+            <div><dt>Среднее D_exe</dt><dd class="mono" id="cmp-avg-dexe">0 %</dd></div>
+            <div><dt>Среднее D_ready</dt><dd class="mono" id="cmp-avg-dready">0 %</dd></div>
+          </dl>
+          <p class="hint">
+            T_mono — время задания в однопрограммной ОС; T_multi — время
+            нахождения процесса в мультипрограммной системе; D_multi —
+            производительность по сравнению с однопрограммной ОС.
+          </p>
+        </div>
+      </section>
+
+      <!-- Затраты ОС на системные действия -->
+      <section class="panel span-5">
+        <header class="panel-head">
+          <h2>Затраты ОС на системные действия</h2>
+        </header>
+        <div class="panel-body">
+          <dl class="kv two-col">
+            <div><dt>Загрузка, T_загр</dt><dd class="mono" id="cost-load">0</dd></div>
+            <div><dt>Переключение, T_перекл</dt><dd class="mono" id="cost-dispatch">0</dd></div>
+            <div><dt>Инициализация ВВ, T_иниц.ВВ</dt><dd class="mono" id="cost-io-init">0</dd></div>
+            <div><dt>Прерывание ВВ, T_прерыв</dt><dd class="mono" id="cost-io-int">0</dd></div>
+            <div><dt>Завершение, T_заверш</dt><dd class="mono" id="cost-term">0</dd></div>
+            <div><dt>Всего затрат, тактов</dt><dd class="mono" id="cost-total">0</dd></div>
+          </dl>
+          <p class="hint">
+            Время системных действий начисляется готовым процессам
+            подпрограммой «Увеличить время готовых процессов».
+          </p>
         </div>
       </section>
 
@@ -236,6 +304,7 @@
     <footer class="footer">
       <span>Диспетчеризация: <code>P = argmax(DynamicPriority)</code>, выбор только при освобождении ЦПр · приоритет в очереди: <code>DynamicPriority += Size</code> каждый такт</span>
       <span>Полезная загрузка ЦПр = <code>T<sub>занят</sub> / T</code> · производительность = <code>N<sub>выполнено</sub> / T · 1000</code> · оборотное время = <code>t<sub>завершения</sub> − t<sub>загрузки</sub></code></span>
+      <span><code>T<sub>mono</sub> = T<sub>загр</sub> + T<sub>ЦПр</sub> + T<sub>ВВ</sub> + T<sub>заверш</sub></code> · <code>T<sub>multi</sub> = T<sub>mono</sub> + T<sub>перекл</sub> + T<sub>иниц.ВВ</sub> + T<sub>прерыв</sub> + T<sub>ожид</sub></code> · <code>D<sub>multi</sub> = ΣT<sub>mono</sub> / T<sub>эфф</sub> · 100 %</code></span>
     </footer>
   </div>
 

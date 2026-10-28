@@ -14,7 +14,7 @@ type App struct {
 	ctx    context.Context
 	system *os.System
 
-	lastEmit time.Time
+	lastViewEmit time.Time
 }
 
 // NewApp создаёт объект приложения.
@@ -39,7 +39,7 @@ func (a *App) startup(ctx context.Context) {
 	a.system.Init()
 
 	// Индикация: каждый такт модели отправляем снимок состояния.
-	a.system.OnTick = a.emitSnapshot
+	a.system.OnTick = a.emitViewSnapshot
 
 	// Управление: директивы оператора из интерфейса.
 	wailsRuntime.EventsOn(ctx, "os:directive", a.handleDirective)
@@ -47,14 +47,14 @@ func (a *App) startup(ctx context.Context) {
 	go a.system.RunLoop()
 }
 
-// emitSnapshot отправляет снимок состояния в интерфейс
+// emitViewSnapshot отправляет снимок состояния в интерфейс
 // (не чаще uiRefreshInterval; завершающий снимок — всегда).
-func (a *App) emitSnapshot(sys *os.System) {
-	if !sys.Quit && time.Since(a.lastEmit) < uiRefreshInterval {
+func (a *App) emitViewSnapshot(sys *os.System) {
+	if !sys.Quit && time.Since(a.lastViewEmit) < uiRefreshInterval {
 		return
 	}
-	a.lastEmit = time.Now()
-	wailsRuntime.EventsEmit(a.ctx, "os:update", sys.Snapshot())
+	a.lastViewEmit = time.Now()
+	wailsRuntime.EventsEmit(a.ctx, "os:update", sys.ViewSnapshot())
 }
 
 // handleDirective принимает директиву оператора из интерфейса.
