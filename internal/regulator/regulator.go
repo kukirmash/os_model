@@ -29,6 +29,8 @@ const (
 	EventIOStart                 // процессор ВВ начал работу: «Инициализация IO» → «Блокирован»
 	EventIOComplete              // прерывание от ВВ: «Блокирован» → «Готов»
 	EventTerminate               // завершение задания: выгрузка процесса
+	EventSuspend                 // оператор приостановил процесс
+	EventResume                  // оператор возобновил процесс
 )
 
 // ----------------------------------------------------------------------------------------
@@ -49,6 +51,7 @@ type Regulator struct {
 
 	Table     []*process.PSW // таблица слов состояний процессов (резидентные процессы)
 	Completed int            // число выполненных (завершённых) заданий
+	Destroyed int            // число процессов, уничтоженных оператором
 }
 
 // ----------------------------------------------------------------------------------------
@@ -134,6 +137,25 @@ func (r *Regulator) Process(p *process.PSW, event Event) bool {
 			r.Stats.OnComplete(p)
 		}
 
+	case EventSuspend:
+		// Приостановить можно готовый или активный процесс. Если процесс
+		// активен, освобождение ЦПр выполняет ядро модели.
+		if p.State != process.StateReady && p.State != process.StateActive {
+			return false
+		}
+		if p.State == process.StateReady {
+			r.Planner.Remove(p)
+		}
+		p.State = process.StateSuspended
+
+	case EventResume:
+		// Возобновлённый процесс снова становится готовым к выполнению.
+		if p.State != process.StateSuspended {
+			return false
+		}
+		p.State = process.StateReady
+		r.Planner.Add(p)
+
 	default:
 		return false
 	}
@@ -178,6 +200,37 @@ func (r *Regulator) charge(action stats.SystemAction, ticks int) {
 // при выполнении команды завершения задания.
 func (r *Regulator) Terminate(p *process.PSW) {
 	r.Process(p, EventTerminate)
+}
+
+// ----------------------------------------------------------------------------------------
+// Destroy — уничтожение процесса оператором. Процесс не считается
+// выполненным: счётчик Completed не увеличивается, средние времена
+// завершённых процессов не меняются.
+func (r *Regulator) Destroy(p *process.PSW) bool {
+	if p == nil || p.State == process.StateNone {
+		return false
+	}
+	r.Planner.Remove(p)
+	r.Memory.Free(*p.Task)
+	r.removeFromTable(p)
+	p.State = process.StateNone
+	r.Destroyed++
+	if r.Stats != nil {
+		r.Stats.OnDestroy()
+	}
+	return true
+}
+
+// ----------------------------------------------------------------------------------------
+// ResumeAll возобновляет все приостановленные процессы. Используется
+// директивой «Выполнить загруженные задания и выключить питание».
+func (r *Regulator) ResumeAll() {
+	for _, p := range r.Table {
+		if p.State == process.StateSuspended {
+			p.State = process.StateReady
+			r.Planner.Add(p)
+		}
+	}
 }
 
 // ----------------------------------------------------------------------------------------

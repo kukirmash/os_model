@@ -12,8 +12,8 @@
 
 "use strict";
 
-const UI_STATE_NAMES = ["Отсутствует", "Готов", "Активен", "Инициализация IO", "Блокирован"];
-const UI_STATE_CLASSES = ["st-none", "st-ready", "st-active", "st-io-init", "st-blocked"];
+const UI_STATE_NAMES = ["Отсутствует", "Готов", "Активен", "Инициализация IO", "Блокирован", "Приостановлен"];
+const UI_STATE_CLASSES = ["st-none", "st-ready", "st-active", "st-io-init", "st-blocked", "st-suspended"];
 const UI_CPU_NAMES = ["Ожидание", "Работа"];
 const UI_OP_NAMES = ["+", "−", "×", "÷"];
 const UI_INTERRUPT_NAMES = ["окончание ВВ", "таймер"];
@@ -22,14 +22,16 @@ const uiById = (id) => document.getElementById(id);
 
 let uiPaused = false;
 let uiFinished = false;
+let uiLastView = null;
+let uiSelectedProcessId = 0;
 
 // ----------------------------------------------------------------------------
 // Отправка директив в ядро
 // ----------------------------------------------------------------------------
 
-function uiSendDirective(name) {
+function uiSendDirective(name, payload = {}) {
   if (window.runtime) {
-    window.runtime.EventsEmit("os:directive", name);
+    window.runtime.EventsEmit("os:directive", { name, ...payload });
   }
 }
 
@@ -37,13 +39,90 @@ uiById("btn-pause").addEventListener("click", () => uiSendDirective(uiPaused ? "
 uiById("btn-slower").addEventListener("click", () => uiSendDirective("speed-down"));
 uiById("btn-faster").addEventListener("click", () => uiSendDirective("speed-up"));
 uiById("btn-quit").addEventListener("click", () => {
-  if (!uiFinished && confirm("Завершить моделирование?")) {
+  if (!uiFinished && confirm("Выключить питание?")) {
     uiSendDirective("quit");
+  }
+});
+
+uiById("btn-autoload").addEventListener("click", () => {
+  const enabled = uiLastView?.autoLoadEnabled;
+  uiSendDirective(enabled ? "autoload-pause" : "autoload-resume");
+});
+
+uiById("btn-load-task").addEventListener("click", () => uiSendDirective("load-task"));
+
+uiById("btn-finish").addEventListener("click", () => {
+  if (!uiFinished && confirm("Выполнить загруженные задания и выключить питание?")) {
+    uiSendDirective("finish-and-quit");
+  }
+});
+
+uiById("btn-apply-task").addEventListener("click", () => {
+  const task = {
+    size: Number(uiById("dir-task-size").value),
+    commands: Number(uiById("dir-task-commands").value),
+    ioPercent: Number(uiById("dir-task-io").value),
+    priority: Number(uiById("dir-task-priority").value),
+  };
+  if (!task.size || !task.commands || !task.priority) {
+    alert("Заполните размер, число команд и приоритет.");
+    return;
+  }
+  if (task.ioPercent < 0 || task.ioPercent > 100) {
+    alert("Процент команд ВВ должен быть в диапазоне 0..100.");
+    return;
+  }
+  uiSendDirective("set-next-task", task);
+});
+
+uiById("btn-clear-task").addEventListener("click", () => uiSendDirective("clear-next-task"));
+
+uiById("btn-set-memory").addEventListener("click", () => {
+  const size = Number(uiById("dir-memory").value);
+  if (!size || size <= 0) {
+    alert("Введите положительный размер памяти.");
+    return;
+  }
+  uiSendDirective("set-memory", { memorySize: size });
+});
+
+uiById("btn-suspend").addEventListener("click", () => {
+  if (uiSelectedProcessId) {
+    uiSendDirective("suspend-process", { processId: uiSelectedProcessId });
+  }
+});
+
+uiById("btn-resume").addEventListener("click", () => {
+  if (uiSelectedProcessId) {
+    uiSendDirective("resume-process", { processId: uiSelectedProcessId });
+  }
+});
+
+uiById("btn-destroy").addEventListener("click", () => {
+  if (uiSelectedProcessId && confirm(`Уничтожить процесс #${uiSelectedProcessId}?`)) {
+    uiSendDirective("destroy-process", { processId: uiSelectedProcessId });
+  }
+});
+
+uiById("proc-table").addEventListener("click", (event) => {
+  const row = event.target.closest("tr[data-id]");
+  if (!row) {
+    return;
+  }
+  uiSelectedProcessId = Number(row.dataset.id);
+  if (uiLastView) {
+    uiRenderProcesses(uiLastView);
+    uiRenderDirectives(uiLastView);
   }
 });
 
 window.addEventListener("keydown", (event) => {
   if (uiFinished || event.repeat) {
+    return;
+  }
+
+  const tag = event.target?.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
     return;
   }
 
@@ -63,8 +142,48 @@ window.addEventListener("keydown", (event) => {
     return;
   }
 
-  if ("qQйЙ".includes(event.key) && confirm("Завершить моделирование?")) {
-    uiSendDirective("quit");
+  if (event.key === "a" || event.key === "A" || event.key === "ф" || event.key === "Ф") {
+    const enabled = uiLastView?.autoLoadEnabled;
+    uiSendDirective(enabled ? "autoload-pause" : "autoload-resume");
+    return;
+  }
+
+  if (event.key === "l" || event.key === "L" || event.key === "д" || event.key === "Д") {
+    uiSendDirective("load-task");
+    return;
+  }
+
+  if (event.key === "p" || event.key === "P" || event.key === "з" || event.key === "З") {
+    const process = selectedProcess();
+    if (!process) {
+      return;
+    }
+    if (process.state === 5) {
+      uiSendDirective("resume-process", { processId: process.id });
+    } else {
+      uiSendDirective("suspend-process", { processId: process.id });
+    }
+    return;
+  }
+
+  if (event.key === "Delete") {
+    if (uiSelectedProcessId && confirm(`Уничтожить процесс #${uiSelectedProcessId}?`)) {
+      uiSendDirective("destroy-process", { processId: uiSelectedProcessId });
+    }
+    return;
+  }
+
+  if (event.key === "f" || event.key === "F" || event.key === "а" || event.key === "А") {
+    if (!uiFinished && confirm("Выполнить загруженные задания и выключить питание?")) {
+      uiSendDirective("finish-and-quit");
+    }
+    return;
+  }
+
+  if ("qQйЙ".includes(event.key)) {
+    if (confirm("Выключить питание?")) {
+      uiSendDirective("quit");
+    }
   }
 });
 
@@ -95,6 +214,13 @@ function uiStateMark(state) {
   const name = UI_STATE_NAMES[state] ?? "?";
   const cls = UI_STATE_CLASSES[state] ?? "st-none";
   return `<span class="state ${cls}">${name}</span>`;
+}
+
+function selectedProcess() {
+  if (!uiLastView || !uiSelectedProcessId) {
+    return null;
+  }
+  return (uiLastView.processes ?? []).find((p) => p.id === uiSelectedProcessId) || null;
 }
 
 function uiCommandText(view) {
@@ -139,6 +265,9 @@ function uiRenderHeader(view) {
   if (view.quit) {
     status.textContent = "Завершено";
     status.className = "state st-none";
+  } else if (view.finishAndQuit) {
+    status.textContent = "Завершение";
+    status.className = "state st-blocked";
   } else if (view.paused) {
     status.textContent = "Пауза";
     status.className = "state st-blocked";
@@ -162,7 +291,7 @@ function uiRenderSystem(view) {
     : 0;
 
   uiSetText("sys-generated", uiFormatInt(view.generated));
-  uiSetText("sys-completed", uiFormatInt(view.completed));
+  uiSetText("sys-completed", `${uiFormatInt(view.completed)} / ${uiFormatInt(stats.destroyedCount)}`);
   uiSetText("sys-table", `${view.processes.length} / ${view.maxProcesses}`);
   uiSetText("sys-int", uiFormatInt(view.interruptsHandled));
   uiSetText(
@@ -266,6 +395,50 @@ function uiRenderParams(view) {
       <td class="mono">${r.step}</td>
       <td>${r.comment || "—"}</td>
     </tr>`).join("");
+}
+
+function uiRenderDirectives(view) {
+  const process = selectedProcess();
+  if (uiSelectedProcessId && !process) {
+    uiSelectedProcessId = 0;
+  }
+
+  const autoLoad = Boolean(view.autoLoadEnabled);
+  uiSetText("dir-autoload", autoLoad ? "Автозагрузка: вкл" : "Автозагрузка: выкл");
+  uiSetText("btn-autoload", autoLoad ? "Приостановить автозагрузку" : "Продолжить автозагрузку");
+
+  const next = view.nextTask;
+  uiSetText(
+    "dir-next-task",
+    next
+      ? `Следующее задание: размер ${next.size}, команд ${next.totalCommands}, ВВ ${next.ioPercent} %, приоритет ${next.basePriority}`
+      : "Переопределение не задано — параметры берутся из диапазонов"
+  );
+
+  const selected = uiById("dir-selected");
+  if (process) {
+    selected.textContent = `#${process.id}: ${UI_STATE_NAMES[process.state] ?? "?"}`;
+  } else {
+    selected.textContent = "Процесс не выбран";
+  }
+
+  uiById("btn-suspend").disabled = !process || (process.state !== 1 && process.state !== 2);
+  uiById("btn-resume").disabled = !process || process.state !== 5;
+  uiById("btn-destroy").disabled = !process;
+  uiById("btn-autoload").disabled = Boolean(view.quit);
+  uiById("btn-load-task").disabled = Boolean(view.quit);
+  uiById("btn-finish").disabled = Boolean(view.quit) || Boolean(view.finishAndQuit);
+  uiById("btn-apply-task").disabled = Boolean(view.quit);
+  uiById("btn-clear-task").disabled = Boolean(view.quit);
+  uiById("btn-set-memory").disabled = Boolean(view.quit);
+
+  const directive = view.lastDirective ?? {};
+  const status = directive.message
+    ? `${directive.time} такт · ${directive.name}: ${directive.message}`
+    : "Результат директивы: —";
+  const message = uiById("dir-message");
+  message.textContent = status;
+  message.className = directive.message && !directive.ok ? "hint hint-error" : "hint";
 }
 
 function uiRenderAverages(view) {
@@ -388,7 +561,7 @@ function uiRenderProcesses(view) {
   uiSetText("proc-count", `${rows.length} / ${view.maxProcesses}`);
 
   uiRenderRows("proc-table", rows, "proc-empty", (p) => `
-    <tr class="${p.state === 2 ? "row-active" : ""}">
+    <tr data-id="${p.id}" class="${p.state === 2 ? "row-active" : ""} ${p.id === uiSelectedProcessId ? "row-selected" : ""}">
       <td class="mono">#${p.id}</td>
       <td>${uiStateMark(p.state)}</td>
       <td class="mono">${p.pc}</td>
@@ -399,6 +572,7 @@ function uiRenderProcesses(view) {
       <td class="mono">${p.waitTicks}</td>
       <td class="mono">${p.execTicks}</td>
       <td class="mono">${p.ioTicks}</td>
+      <td class="mono">${p.suspendedTicks}</td>
       <td class="mono">${p.turnaround}</td>
     </tr>`);
 }
@@ -427,11 +601,13 @@ function uiRenderProcessComparison(view) {
 // ----------------------------------------------------------------------------
 
 function uiRenderView(view) {
+  uiLastView = view;
   uiRenderHeader(view);
   uiRenderSystem(view);
   uiRenderCPU(view);
   uiRenderTask(view);
   uiRenderParams(view);
+  uiRenderDirectives(view);
   uiRenderAverages(view);
   uiRenderComparison(view);
   uiRenderCosts(view);

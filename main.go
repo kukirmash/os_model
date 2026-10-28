@@ -3,6 +3,7 @@ package main
 
 import (
 	"embed"
+	"flag"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -13,7 +14,10 @@ import (
 var assets embed.FS
 
 func main() {
-	app := NewApp()
+	seed := flag.Uint64("seed", 0, "начальное значение генератора случайных чисел")
+	flag.Parse()
+
+	app := NewApp(*seed)
 
 	err := wails.Run(&options.App{
 		Title:     "Модель ОС — вариант 11",

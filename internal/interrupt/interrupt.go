@@ -50,6 +50,19 @@ func (s *Supervisor) Post(signal Signal) {
 }
 
 // ----------------------------------------------------------------------------------------
+// Cancel удаляет ожидающие обработки сигналы указанного процесса.
+// Используется при уничтожении процесса оператором.
+func (s *Supervisor) Cancel(p *process.PSW) {
+	pending := s.Pending[:0]
+	for _, signal := range s.Pending {
+		if signal.Process != p {
+			pending = append(pending, signal)
+		}
+	}
+	s.Pending = pending
+}
+
+// ----------------------------------------------------------------------------------------
 // ExtractAll извлекает все накопившиеся сигналы для обработки.
 func (s *Supervisor) ExtractAll() []Signal {
 	pending := s.Pending

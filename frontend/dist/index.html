@@ -42,11 +42,61 @@
       <p class="control-help">
         Управление: <kbd>Space</kbd> — пауза / продолжить,
         <kbd>+</kbd> <kbd>−</kbd> — скорость ± 10 %,
-        <kbd>Q</kbd> — завершить моделирование
+        <kbd>A</kbd> — автозагрузка, <kbd>L</kbd> — загрузить,
+        <kbd>P</kbd> — процесс, <kbd>Del</kbd> — уничтожить,
+        <kbd>F</kbd> — выполнить и выйти, <kbd>Q</kbd> — выключить
       </p>
     </header>
 
     <main class="grid">
+
+      <!-- Директивы оператора -->
+      <section class="panel span-12">
+        <header class="panel-head">
+          <h2>Директивы оператора</h2>
+          <span class="badge mono" id="dir-autoload">Автозагрузка: вкл</span>
+        </header>
+        <div class="panel-body">
+          <div class="directives-grid">
+            <div class="directive-group">
+              <h3>Загрузка заданий</h3>
+              <button type="button" id="btn-autoload">Приостановить автозагрузку</button>
+              <button type="button" id="btn-load-task">Загрузить задание</button>
+              <button type="button" id="btn-finish" class="danger">Выполнить загруженные и выключить</button>
+            </div>
+
+            <div class="directive-group">
+              <h3>Следующее задание</h3>
+              <label>Размер <input id="dir-task-size" type="number" min="1" placeholder="100–500"></label>
+              <label>Команд <input id="dir-task-commands" type="number" min="1" placeholder="10–20"></label>
+              <label>ВВ, % <input id="dir-task-io" type="number" min="0" max="100" placeholder="0–50"></label>
+              <label>Приоритет <input id="dir-task-priority" type="number" min="1" placeholder="1–10"></label>
+              <div class="directive-actions">
+                <button type="button" id="btn-apply-task">Применить</button>
+                <button type="button" id="btn-clear-task">Сбросить</button>
+              </div>
+              <p class="hint" id="dir-next-task">Переопределение не задано</p>
+            </div>
+
+            <div class="directive-group">
+              <h3>Память</h3>
+              <label>Новый объём <input id="dir-memory" type="number" min="1" placeholder="4096"></label>
+              <button type="button" id="btn-set-memory">Изменить память</button>
+            </div>
+
+            <div class="directive-group">
+              <h3>Выбранный процесс</h3>
+              <p class="hint" id="dir-selected">Процесс не выбран</p>
+              <div class="directive-actions">
+                <button type="button" id="btn-suspend">Приостановить</button>
+                <button type="button" id="btn-resume">Продолжить</button>
+                <button type="button" id="btn-destroy" class="danger">Уничтожить</button>
+              </div>
+            </div>
+          </div>
+          <p class="hint" id="dir-message">Результат директивы: —</p>
+        </div>
+      </section>
 
       <!-- Вывод параметров системы -->
       <section class="panel span-5">
@@ -56,7 +106,7 @@
         <div class="panel-body">
           <dl class="kv two-col">
             <div><dt>Загружено заданий</dt><dd class="mono" id="sys-generated">0</dd></div>
-            <div><dt>Выполнено заданий</dt><dd class="mono" id="sys-completed">0</dd></div>
+            <div><dt>Выполнено / уничтожено</dt><dd class="mono" id="sys-completed">0 / 0</dd></div>
             <div><dt>Таблица PSW</dt><dd class="mono" id="sys-table">0 / 16</dd></div>
             <div><dt>Прерываний обработано</dt><dd class="mono" id="sys-int">0</dd></div>
             <div><dt>Очередь готовности, текущая / средняя / макс.</dt><dd class="mono" id="sys-ready">0 / 0 / 0</dd></div>
@@ -140,7 +190,7 @@
                 <tr>
                   <th>№</th><th>Состояние</th><th>PC</th><th>Команд</th><th>Размер</th>
                   <th>ВВ, %</th><th>Приоритет база → динамика</th>
-                  <th>Ожидание</th><th>ЦПр</th><th>ВВ</th><th>Оборот</th>
+                  <th>Ожидание</th><th>ЦПр</th><th>ВВ</th><th>Пауза</th><th>Оборот</th>
                 </tr>
               </thead>
               <tbody></tbody>

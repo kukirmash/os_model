@@ -38,6 +38,7 @@ func MultiTicks(p *process.PSW) int {
 		p.SwitchTicks +
 		p.IOInitTicks +
 		p.IOIntrTicks +
+		p.SuspendedTicks +
 		ReadyTicks(p)
 }
 

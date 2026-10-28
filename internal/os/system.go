@@ -27,18 +27,6 @@ const (
 )
 
 // ----------------------------------------------------------------------------------------
-// Directive — управляющая директива оператора.
-type Directive int
-
-const (
-	DirectivePause     Directive = iota // приостановить моделирование
-	DirectiveResume                     // продолжить моделирование
-	DirectiveSpeedUp                    // увеличить скорость
-	DirectiveSpeedDown                  // уменьшить скорость
-	DirectiveQuit                       // завершить моделирование
-)
-
-// ----------------------------------------------------------------------------------------
 // LastTaskInfo — параметры последнего сгенерированного задания: выводятся
 // подпрограммой индикации «Вывод параметров нового задания» (лабораторная
 // работа 6). Задание может быть не загружено, если не хватило ресурсов.
@@ -87,6 +75,16 @@ type System struct {
 	// когда ЦПр простаивает. В тестах отключается для детерминированных
 	// прогонов фиксированного набора заданий.
 	AutoLoadEnabled bool
+
+	// NextTask — разовое переопределение параметров следующего задания.
+	// nil означает генерацию по диапазонам params.json.
+	NextTask *process.Task
+
+	// FinishAndQuit — выполнить загруженные задания и выключить питание.
+	FinishAndQuit bool
+
+	// LastDirective — результат последней выполненной директивы.
+	LastDirective DirectiveResult
 
 	// OnTick вызывается каждый такт для индикации состояния модели
 	// (например, для отправки снимка в интерфейс). Может быть nil.
@@ -166,7 +164,7 @@ func (sys *System) Init() {
 	}
 
 	if sys.Directives == nil {
-		sys.Directives = make(chan Directive, MaxProcesses)
+		sys.Directives = make(chan Directive, 64)
 	}
 
 	sys.Time = 0
@@ -184,9 +182,20 @@ func (sys *System) Init() {
 // память). При успехе регулировщик создаёт процесс в состоянии «Готов».
 // Возвращает true, если задание загружено.
 func (sys *System) GenerateAndLoadTask() bool {
-	// Параметры нового задания (выводятся подпрограммой индикации
-	// «Вывод параметров нового задания»).
-	return sys.LoadTask(sys.generateTask())
+	// Параметры нового задания: разовое переопределение оператора или
+	// генерация по диапазонам params.json.
+	var task process.Task
+	if sys.NextTask != nil {
+		task = *sys.NextTask
+	} else {
+		task = sys.generateTask()
+	}
+
+	loaded := sys.LoadTask(task)
+	if loaded && sys.NextTask != nil {
+		sys.NextTask = nil
+	}
+	return loaded
 }
 
 // ----------------------------------------------------------------------------------------
@@ -264,6 +273,7 @@ func (sys *System) RunLoop() {
 		}
 
 		sys.HandleDirectives()
+		sys.checkFinish()
 
 		if sys.Quit {
 			sys.notify() // завершающий снимок состояния
@@ -412,23 +422,6 @@ func (sys *System) generateTask() process.Task {
 		TotalCommands: values.Commands,
 		IOPercent:     values.IOPercent,
 		BasePriority:  values.BasePriority,
-	}
-}
-
-// ----------------------------------------------------------------------------------------
-// applyDirective выполняет одну директиву оператора.
-func (sys *System) applyDirective(d Directive) {
-	switch d {
-	case DirectivePause:
-		sys.Paused = true
-	case DirectiveResume:
-		sys.Paused = false
-	case DirectiveSpeedUp:
-		sys.changeSpeed(speedStepPercent)
-	case DirectiveSpeedDown:
-		sys.changeSpeed(-speedStepPercent)
-	case DirectiveQuit:
-		sys.Quit = true
 	}
 }
 

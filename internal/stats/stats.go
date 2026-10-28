@@ -64,6 +64,7 @@ type Stats struct {
 
 	// Выходные параметры завершённых процессов (накопители средних).
 	CompletedCount int
+	DestroyedCount int // процессов уничтожено оператором
 	SumWait        int
 	SumExec        int
 	SumIO          int
@@ -116,6 +117,13 @@ func (s *Stats) OnComplete(p *process.PSW) {
 	s.SumMulti += MultiTicks(p)
 	s.SumDExe += ExecutionIncrease(p)
 	s.SumDReady += ReadyShare(p)
+}
+
+// ----------------------------------------------------------------------------------------
+// OnDestroy учитывает процесс, уничтоженный оператором. Такой процесс
+// не входит в число выполненных и не участвует в средних временах.
+func (s *Stats) OnDestroy() {
+	s.DestroyedCount++
 }
 
 // ----------------------------------------------------------------------------------------
@@ -190,6 +198,8 @@ func (s *Stats) Collect(now int, cpuBusy bool, table []*process.PSW, readyLen, i
 			p.ExecTicks++
 		case process.StateInitIO, process.StateBlockedIO:
 			p.IOTicks++
+		case process.StateSuspended:
+			p.SuspendedTicks++
 		}
 	}
 }

@@ -25,6 +25,20 @@ func (a *Allocator) CheckAvailable(size int) bool {
 }
 
 // ----------------------------------------------------------------------------------------
+// SetTotalSize изменяет общий объём моделируемой памяти. Уменьшение ниже
+// уже занятого объёма не допускается.
+func (a *Allocator) SetTotalSize(size int) error {
+	if size <= 0 {
+		return fmt.Errorf("размер памяти должен быть больше 0")
+	}
+	if size < a.UsedSize {
+		return fmt.Errorf("нельзя уменьшить память до %d: занято %d единиц", size, a.UsedSize)
+	}
+	a.TotalSize = size
+	return nil
+}
+
+// ----------------------------------------------------------------------------------------
 // Allocate выделяет память под новое задание и регистрирует его.
 // Возвращает ошибку, если свободной памяти недостаточно.
 func (a *Allocator) Allocate(task process.Task) error {

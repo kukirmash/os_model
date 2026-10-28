@@ -25,10 +25,11 @@ type UIProcessInfo struct {
 	BasePriority    int `json:"basePriority"`
 
 	// Времена процесса, тактов (лабораторная работа 6).
-	WaitTicks  int `json:"waitTicks"`  // ожидание в очереди готовности
-	ExecTicks  int `json:"execTicks"`  // выполнение на ЦПр
-	IOTicks    int `json:"ioTicks"`    // «Инициализация IO» и «Блокирован»
-	Turnaround int `json:"turnaround"` // оборотное время от загрузки
+	WaitTicks      int `json:"waitTicks"`      // ожидание в очереди готовности
+	ExecTicks      int `json:"execTicks"`      // выполнение на ЦПр
+	IOTicks        int `json:"ioTicks"`        // «Инициализация IO» и «Блокирован»
+	SuspendedTicks int `json:"suspendedTicks"` // «Приостановлен»
+	Turnaround     int `json:"turnaround"`     // оборотное время от загрузки
 
 	// Составляющие системных затрат (лабораторная работа 7).
 	LoadTicks       int `json:"loadTicks"`
@@ -103,6 +104,15 @@ type UIParamsInfo struct {
 }
 
 // ----------------------------------------------------------------------------------------
+// UIDirectiveInfo — результат последней директивы оператора.
+type UIDirectiveInfo struct {
+	Time    int    `json:"time"`
+	Name    string `json:"name"`
+	OK      bool   `json:"ok"`
+	Message string `json:"message"`
+}
+
+// ----------------------------------------------------------------------------------------
 // UITaskInfo — параметры нового (последнего сгенерированного) задания.
 type UITaskInfo struct {
 	ID            int    `json:"id"`
@@ -155,6 +165,7 @@ type UIStatsInfo struct {
 
 	// Средние выходные параметры завершённых процессов.
 	CompletedCount int     `json:"completedCount"`
+	DestroyedCount int     `json:"destroyedCount"`
 	AvgWait        float64 `json:"avgWait"`       // ожидание, тактов
 	AvgExec        float64 `json:"avgExec"`       // выполнение на ЦПр, тактов
 	AvgIO          float64 `json:"avgIo"`         // ввод-вывод, тактов
@@ -215,8 +226,14 @@ type UISnapshot struct {
 	TaskParams UITaskParams `json:"taskParams"`
 	Params     UIParamsInfo `json:"params"`   // входные параметры из файла (лаб. 8)
 	LastTask   UITaskInfo   `json:"lastTask"` // параметры нового задания
+	NextTask   *UITaskInfo  `json:"nextTask"` // переопределение следующего задания (лаб. 9)
 	Costs      UICostsInfo  `json:"costs"`    // системные затраты (лаб. 7)
 	Stats      UIStatsInfo  `json:"stats"`    // статистика модели (лаб. 6–7)
+
+	// Управление оператором (лабораторная работа 9).
+	AutoLoadEnabled bool            `json:"autoLoadEnabled"`
+	FinishAndQuit   bool            `json:"finishAndQuit"`
+	LastDirective   UIDirectiveInfo `json:"lastDirective"`
 }
 
 // ----------------------------------------------------------------------------------------
@@ -234,6 +251,14 @@ func (sys *System) ViewSnapshot() UISnapshot {
 		CPUState:          int(sys.CPU.State),
 		InterruptsHandled: sys.Interrupts.Handled,
 		MaxProcesses:      MaxProcesses,
+		AutoLoadEnabled:   sys.AutoLoadEnabled,
+		FinishAndQuit:     sys.FinishAndQuit,
+		LastDirective: UIDirectiveInfo{
+			Time:    sys.LastDirective.Time,
+			Name:    sys.LastDirective.Name,
+			OK:      sys.LastDirective.OK,
+			Message: sys.LastDirective.Message,
+		},
 		TaskParams: UITaskParams{
 			SizeMin:       sys.Params.Task.Size.Min,
 			SizeMax:       sys.Params.Task.Size.Max,
@@ -276,6 +301,14 @@ func (sys *System) ViewSnapshot() UISnapshot {
 		BasePriority:  sys.LastTask.Task.BasePriority,
 		Loaded:        sys.LastTask.Loaded,
 		Reason:        sys.LastTask.Reason,
+	}
+	if sys.NextTask != nil {
+		view.NextTask = &UITaskInfo{
+			Size:          sys.NextTask.Size,
+			TotalCommands: sys.NextTask.TotalCommands,
+			IOPercent:     sys.NextTask.IOPercent,
+			BasePriority:  sys.NextTask.BasePriority,
+		}
 	}
 	view.Stats = sys.uiStatsInfo()
 
@@ -342,6 +375,7 @@ func (sys *System) uiStatsInfo() UIStatsInfo {
 		AvgIOPercent:     sys.Stats.AvgIOPercent(),
 		AvgPriority:      sys.Stats.AvgPriority(),
 		CompletedCount:   sys.Stats.CompletedCount,
+		DestroyedCount:   sys.Stats.DestroyedCount,
 		AvgWait:          sys.Stats.AvgWait(),
 		AvgExec:          sys.Stats.AvgExec(),
 		AvgIO:            sys.Stats.AvgIO(),
@@ -384,6 +418,7 @@ func uiProcessInfos(psws []*process.PSW, now int) []UIProcessInfo {
 			WaitTicks:       p.WaitTicks,
 			ExecTicks:       p.ExecTicks,
 			IOTicks:         p.IOTicks,
+			SuspendedTicks:  p.SuspendedTicks,
 			Turnaround:      now - p.LoadedAt,
 			LoadTicks:       p.LoadTicks,
 			TermTicks:       p.TermTicks,

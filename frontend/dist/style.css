@@ -343,6 +343,7 @@ kbd {
 .st-active { color: var(--active); }
 .st-io-init { color: var(--io-init); }
 .st-blocked { color: var(--blocked); }
+.st-suspended { color: #6b4c9a; }
 
 /* ----------------------------------------------------------------------------
    Последовательность выполнения процессов
@@ -402,4 +403,87 @@ kbd {
 .footer code {
   font: 11px var(--mono);
   color: var(--ink);
+}
+
+/* ----------------------------------------------------------------------------
+   Директивы оператора (лабораторная работа 9)
+   -------------------------------------------------------------------------- */
+
+.directives-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.directive-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding-right: 8px;
+  border-right: 1px solid var(--line);
+}
+
+.directive-group:last-child { border-right: none; }
+
+.directive-group h3 {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.directive-group label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.directive-group input {
+  width: 90px;
+  padding: 4px 6px;
+  font: 12px var(--mono);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+}
+
+.directive-group input:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: 0;
+}
+
+.directive-group button {
+  font: 12px var(--sans);
+  padding: 5px 10px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.directive-group button:hover:not(:disabled) { background: #eef1f4; }
+.directive-group button:disabled { color: var(--line-strong); cursor: default; }
+.directive-group button.danger { color: var(--blocked); border-color: #d3a6a2; }
+.directive-group button.danger:hover:not(:disabled) { background: #faeeed; }
+
+.directive-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.table tbody tr[data-id] { cursor: pointer; }
+.table tbody tr.row-selected td { background: #e8eef7; }
+
+@media (max-width: 1000px) {
+  .directives-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

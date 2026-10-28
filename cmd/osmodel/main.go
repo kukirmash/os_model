@@ -11,6 +11,7 @@ import (
 
 func main() {
 	path := flag.String("params", params.DefaultPath, "JSON-файл параметров модели")
+	seed := flag.Uint64("seed", 0, "начальное значение генератора случайных чисел")
 	flag.Parse()
 
 	set, err := params.ReadFile(*path)
@@ -18,6 +19,9 @@ func main() {
 	if err != nil {
 		log.Printf("файл параметров не загружен: %v; используются значения по умолчанию", err)
 		set = params.Default()
+	}
+	if *seed != 0 {
+		set.Seed = *seed
 	}
 
 	system := &os.System{
